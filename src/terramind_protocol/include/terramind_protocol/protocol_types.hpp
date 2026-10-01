@@ -7,7 +7,8 @@ namespace terramind::protocol
 {
 using Bytes = std::vector<uint8_t>;
 constexpr uint8_t CONTROL = 0x01, STATUS = 0x81;
-constexpr uint16_t CURRENT_CAPABILITIES = 0x000f;
+// Chassis, both spreaders, mower and sprayer; lift remains unsupported.
+constexpr uint16_t CURRENT_CAPABILITIES = 0x002f;
 constexpr double FIRMWARE_TIMEOUT = 0.250;
 enum class Result : uint8_t { OK=0, BAD_FRAME=1, BAD_VALUE=2, UNSUPPORTED=3, TIMEOUT=4 };
 struct ProtocolError : std::runtime_error

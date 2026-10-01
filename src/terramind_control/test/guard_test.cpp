@@ -66,3 +66,19 @@ TEST(Guard, InvalidValuesAndStampsStop) {
   EXPECT_FALSE(g.receive({}, 1, .04, false, 15));
   EXPECT_THROW(tc::CommandGuard(.25), std::invalid_argument);
 }
+TEST(Guard, SprayerTimeoutAndCapabilityLossStopOutput) {
+  tc::CommandGuard guard;
+  guard.reset(1);
+  ASSERT_TRUE(guard.receive({}, 1, 0, true, 0x002f));
+  tp::Control c;
+  c.enable = true;
+  c.sprayer = {true, 40};
+  ASSERT_TRUE(guard.receive(c, 1, .01, true, 0x002f));
+  EXPECT_TRUE(guard.sample(.02, true).sprayer.on);
+  EXPECT_FALSE(guard.sample(.17, true).sprayer.on);
+  EXPECT_FALSE(guard.receive(c, 1, .18, true, 0x002f));
+  ASSERT_TRUE(guard.receive({}, 1, .19, true, 0x002f));
+  ASSERT_TRUE(guard.receive(c, 1, .20, true, 0x002f));
+  EXPECT_FALSE(guard.receive(c, 1, .21, true, 0x000f));
+  EXPECT_FALSE(guard.sample(.22, true).sprayer.on);
+}

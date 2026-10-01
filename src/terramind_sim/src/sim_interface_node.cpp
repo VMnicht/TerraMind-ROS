@@ -27,7 +27,7 @@ public:
     session_ = mcu::Session(state_timeout);
     ts::Geometry g{declare_parameter("wheel_diameter_m", 0.20), declare_parameter(
         "wheel_separation_m", 0.45)};
-    auto caps = declare_parameter("capabilities", 15);
+    auto caps = declare_parameter("capabilities", int(tp::CURRENT_CAPABILITIES));
     if (caps < 0 || caps > 63) {
       throw std::invalid_argument("invalid capabilities");
     }

@@ -11,7 +11,8 @@ import yaml
 def generate_launch_description():
     share = Path(get_package_share_directory('terramind_bringup'))
     serial = share/'config/serial.yaml'
-    default_device = yaml.safe_load(serial.read_text())['mcu_serial_node']['ros__parameters']['device']
+    serial_parameters = yaml.safe_load(serial.read_text())['mcu_serial_node']['ros__parameters']
+    default_device = serial_parameters['device']
     common = str(share/'config/control.yaml')
     return LaunchDescription([
         DeclareLaunchArgument('device', default_value=default_device,
@@ -19,7 +20,7 @@ def generate_launch_description():
         DeclareLaunchArgument('panel', default_value='false'),
         Node(package='terramind_control', executable='control_manager_node', parameters=[common], output='screen'),
         Node(package='terramind_mcu', executable='mcu_serial_node', output='screen',
-             parameters=[common, str(serial), {'device': LaunchConfiguration('device'), 'simulated': False}]),
+             parameters=[common, {**serial_parameters, 'device': LaunchConfiguration('device'), 'simulated': False}]),
         Node(package='terramind_panel', executable='control_panel', parameters=[common],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),
     ])

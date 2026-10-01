@@ -34,3 +34,15 @@ def test_missing_chassis_capability():
     Selection().validate(0)
     with pytest.raises(ValueError, match='底盘'):
         Selection(linear_mps=.1).validate(62)
+
+
+def test_sprayer_capability_and_off_normalization():
+    draft = Selection(sprayer_on=True, sprayer_percent=37.5)
+    draft.validate(0x002f)
+    with pytest.raises(ValueError, match='喷洒'):
+        draft.validate(0x000f)
+    with pytest.raises(ValueError, match='升降'):
+        replace(draft, lift_on=True).validate(0x002f)
+    closed = replace(draft, sprayer_on=False)
+    assert closed.normalized().sprayer_percent == 0
+    assert closed.sprayer_percent == 37.5

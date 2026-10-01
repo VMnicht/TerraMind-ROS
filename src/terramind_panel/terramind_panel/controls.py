@@ -2,6 +2,10 @@
 from dataclasses import dataclass, replace
 import math
 
+LEGACY_CAPABILITIES = 0x000f
+CURRENT_CAPABILITIES = 0x002f
+ALL_CAPABILITIES = 0x003f
+
 
 @dataclass(frozen=True)
 class ActuatorField:

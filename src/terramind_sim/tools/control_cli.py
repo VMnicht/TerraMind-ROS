@@ -18,10 +18,11 @@ def main():
     p.add_argument('--left-rpm', type=float, default=0.)
     p.add_argument('--right-rpm', type=float, default=0.)
     p.add_argument('--mower-percent', type=float, default=0.)
+    p.add_argument('--sprayer-percent', type=float, default=0., help='sprayer target 0..100 percent; requires capability bit5')
     p.add_argument('--duration', type=float, default=3.)
     a = p.parse_args()
     for value, low, high in [(a.linear,-.35,.35),(a.angular,-2,2),(a.left_rpm,-500,500),
-                             (a.right_rpm,-500,500),(a.mower_percent,0,100),(a.duration,.02,3600)]:
+                             (a.right_rpm,-500,500),(a.mower_percent,0,100),(a.sprayer_percent,0,100),(a.duration,.02,3600)]:
         if not math.isfinite(value) or not low <= value <= high:
             p.error('a value is outside its protocol range')
     rclpy.init()
@@ -52,6 +53,8 @@ def main():
                 break
         else:
             raise RuntimeError('no ready backend or command subscribers')
+        if a.sprayer_percent > 0 and not states[-1].capabilities & 32:
+            raise RuntimeError('backend does not report sprayer capability (bit5)')
         print(f'Enabling {"SIMULATION" if states[-1].simulated else "REAL HARDWARE"} for {a.duration:g} s')
         req = SetBool.Request(); req.data = True; call(enable, req)
         deadline = time.monotonic()+a.duration
@@ -63,6 +66,7 @@ def main():
             m.left_on = a.left_rpm != 0; m.left_rpm = a.left_rpm
             m.right_on = a.right_rpm != 0; m.right_rpm = a.right_rpm
             m.mower_on = a.mower_percent > 0; m.mower_percent = a.mower_percent
+            m.sprayer_on = a.sprayer_percent > 0; m.sprayer_percent = a.sprayer_percent
             implements.publish(m)
             rclpy.spin_once(n, timeout_sec=0)
             time.sleep(.02)

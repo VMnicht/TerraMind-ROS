@@ -13,7 +13,7 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=['sim', 'serial'], required=True)
-    parser.add_argument('--capabilities', type=int, choices=[15, 63], default=63)
+    parser.add_argument('--capabilities', type=int, choices=[15, 47, 63], default=63)
     parser.add_argument('--screenshot', type=Path)
     args = parser.parse_args()
     os.environ['ROS_DOMAIN_ID'] = str(random.randint(40, 100) if args.mode == 'sim' else random.randint(110, 200))
@@ -74,7 +74,8 @@ def main():
 
         def stopped():
             return (node.phase == 'idle' and node.board.mode == 2 and not node.control.enabled
-                    and node.board.chassis.left_target_rpm == 0 and not node.board.mower.on)
+                    and node.board.chassis.left_target_rpm == 0 and not node.board.mower.on
+                    and not node.board.sprayer.on and node.board.sprayer.target_percent == 0)
 
         try:
             link = str(Path(directory) / 'mcu')
@@ -110,6 +111,22 @@ def main():
                  and (not args.capabilities & 32 or node.board.sprayer.target_percent == 25.))
             pump(.3)
             assert node.board.result == 0
+            if args.capabilities & 32:
+                assert node.board.sprayer.on and node.board.sprayer.feedback_valid
+                assert node.board.sprayer.actual_percent > 0
+                # Sprayer draft/apply, then off-zero, independently of chassis targets.
+                window.editors['sprayer_percent'].setValue(40.)
+                pump(.15)
+                assert node.board.sprayer.target_percent == 25.
+                window.apply_button.click()
+                wait(lambda: node.board.sprayer.target_percent == 40.)
+                window.checks['sprayer'].setChecked(False)
+                window.apply_button.click()
+                wait(lambda: not node.board.sprayer.on and node.board.sprayer.target_percent == 0)
+                assert window.editors['sprayer_percent'].value() == 40.
+                window.checks['sprayer'].setChecked(True)
+                window.apply_button.click()
+                wait(lambda: node.board.sprayer.on and node.board.sprayer.target_percent == 40.)
             if args.screenshot:
                 window.refresh()
                 assert window.grab().save(str(args.screenshot.resolve()))

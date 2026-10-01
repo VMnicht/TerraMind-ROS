@@ -67,3 +67,34 @@ TEST(Model, GeometryAndArc) {
   EXPECT_NEAR(d.x, .2 * std::sin(1), .003);
   EXPECT_NEAR(d.y, .2 * (1 - std::cos(1)), .003);
 }
+TEST(Model, SprayerOnOffTimeoutAndLegacyBoard) {
+  ts::BoardModel current;
+  EXPECT_EQ(current.state().system.capabilities, 0x002f);
+  tp::Control c;
+  c.enable = true;
+  c.sprayer = {true, 40};
+  current.accept(c, 1, 0);
+  EXPECT_EQ(current.state().system.result, 0);
+  EXPECT_TRUE(current.state().sprayer.on);
+  EXPECT_FLOAT_EQ(current.state().sprayer.target, 40);
+  current.step(.1);
+  EXPECT_TRUE(current.state().sprayer.valid);
+  EXPECT_GT(current.state().sprayer.actual, 0);
+  EXPECT_FALSE(current.state().lift.valid);
+  c.sprayer.on = false;
+  current.accept(c, 2, .11);
+  EXPECT_FALSE(current.state().sprayer.on);
+  EXPECT_FLOAT_EQ(current.state().sprayer.target, 0);
+  c.sprayer.on = true;
+  current.accept(c, 3, .12);
+  current.step(.371);
+  EXPECT_TRUE(current.state().system.faults & 1);
+  EXPECT_FALSE(current.state().sprayer.on);
+  EXPECT_FLOAT_EQ(current.state().sprayer.target, 0);
+
+  ts::BoardModel legacy({}, 0x000f);
+  legacy.accept(c, 1, 0);
+  EXPECT_EQ(legacy.state().system.result, uint8_t(tp::Result::UNSUPPORTED));
+  EXPECT_FALSE(legacy.state().sprayer.on);
+  EXPECT_FALSE(legacy.state().sprayer.valid);
+}

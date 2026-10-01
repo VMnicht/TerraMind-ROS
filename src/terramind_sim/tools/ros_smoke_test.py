@@ -54,7 +54,8 @@ def main():
                     m = TwistStamped(); m.header.stamp = node.get_clock().now().to_msg();m.header.frame_id='base_link'
                     m.twist.linear.x = velocity;m.twist.angular.z=.2;pub.publish(m)
                     if implement:
-                        im=ImplementCommand();im.header=m.header;im.left_on=True;im.left_rpm=120.;im.mower_on=True;im.mower_percent=5.;implement_pub.publish(im)
+                        im=ImplementCommand();im.header=m.header;im.left_on=True;im.left_rpm=120.;im.mower_on=True;im.mower_percent=5.
+                        im.sprayer_on=True;im.sprayer_percent=35.;implement_pub.publish(im)
                     next_send = time.monotonic()+.02
                 rclpy.spin_once(node, timeout_sec=.005)
                 if predicate():
@@ -86,13 +87,17 @@ def main():
             manager=launch('terramind_control','control_manager_node')
             wait(lambda: board and board[-1].link_ready and control and control[-1].link_ready and pub.get_subscription_count()>0)
             assert board[-1].mode==2 and not control[-1].enabled
-            arm();wait(lambda: board[-1].mode==1 and abs(board[-1].chassis.linear_mps-.12)<1e-5 and board[-1].mower.on, stream=True, implement=True)
+            assert board[-1].capabilities == 47
+            arm();wait(lambda: board[-1].mode==1 and abs(board[-1].chassis.linear_mps-.12)<1e-5
+                       and board[-1].mower.on and board[-1].sprayer.on
+                       and board[-1].sprayer.target_percent==35., stream=True, implement=True)
             pump(.3,stream=True,implement=True)
             if a.mode=='sim':
                 assert poses and poses[-1].pose.pose.position.x>0
             # Stop publishing implements while keeping cmd_vel alive: independent watchdog.
             wait(lambda: not control[-1].enabled and board[-1].mode==2,stream=True)
             assert board[-1].chassis.left_target_rpm==0 and not board[-1].mower.on
+            assert not board[-1].sprayer.on and board[-1].sprayer.target_percent==0
             pump(.2,stream=True);assert board[-1].mode==2
             arm();wait(lambda: board[-1].mode==1 and board[-1].chassis.linear_mps>0,stream=True)
             wait(lambda: not control[-1].enabled and board[-1].mode==2)

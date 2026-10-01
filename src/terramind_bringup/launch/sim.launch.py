@@ -26,10 +26,12 @@ def generate_launch_description():
         DeclareLaunchArgument('description', default_value='true'),
         DeclareLaunchArgument('panel', default_value='false'),
         DeclareLaunchArgument('capabilities', default_value=str(geometry['capabilities']),
-                              description='Simulation capability mask: 15=current board, 63=all actuators'),
+                              description='Simulation capability mask: 47=current board with sprayer, 15=legacy, 63=all actuators'),
         Node(package='terramind_control', executable='control_manager_node', parameters=[common], output='screen'),
         Node(package='terramind_sim', executable='sim_interface_node',
-             parameters=[common, str(simulation), {'capabilities': ParameterValue(LaunchConfiguration('capabilities'), value_type=int)}], output='screen'),
+             # Merge before emitting the parameter file: a node-specific YAML
+             # entry can otherwise override the generated wildcard arguments.
+             parameters=[common, {**geometry, 'capabilities': ParameterValue(LaunchConfiguration('capabilities'), value_type=int)}], output='screen'),
         Node(package='terramind_panel', executable='control_panel', parameters=[common, {'backend_label': '二维运动仿真'}],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),
         Node(package='robot_state_publisher', executable='robot_state_publisher',

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TerraMind Debug
+Name[zh_CN]=TerraMind 调试总面板
+Comment=启动机器人后端、控制面板、构建与测试
+Exec=/home/tang/TerraMind/start_debug.sh
+Path=/home/tang/TerraMind
+Icon=applications-engineering
+Terminal=false
+Categories=Development;Engineering;
+StartupNotify=true

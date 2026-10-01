@@ -136,3 +136,31 @@ TEST(Protocol, StatusFullRoundTrip) {
   EXPECT_FLOAT_EQ(d.mower.value, 20);
   EXPECT_FALSE(d.lift.valid);
 }
+TEST(Protocol, SprayerV1WireAndReportedCapability) {
+  Control c;
+  c.enable = true;
+  c.sprayer = {true, 37.5f};
+  EXPECT_NO_THROW(validate(c, 0x002f));
+  EXPECT_THROW(validate(c, 0x000f), ProtocolError);
+  auto wire = encode_control(c, 123);
+  ASSERT_EQ(wire.size(), 60u);
+  // The existing v1 block stays on/off + little-endian float32 percent.
+  const Bytes spray_block{0x50, 5, 1, 0, 0, 0x16, 0x42};
+  EXPECT_EQ(Bytes(wire.begin() + 49, wire.begin() + 56), spray_block);
+  const auto decoded = decode_control(unpack(wire));
+  EXPECT_TRUE(decoded.sprayer.on);
+  EXPECT_FLOAT_EQ(decoded.sprayer.value, 37.5f);
+
+  State state;
+  state.system.capabilities = 0x002f;
+  state.sprayer = {true, 37.5f, 32.25f, true};
+  auto feedback = decode_state(unpack(encode_state(state, 124)));
+  EXPECT_EQ(feedback.system.capabilities, 0x002f);
+  EXPECT_TRUE(feedback.sprayer.on);
+  EXPECT_FLOAT_EQ(feedback.sprayer.target, 37.5f);
+  EXPECT_FLOAT_EQ(feedback.sprayer.actual, 32.25f);
+  EXPECT_TRUE(feedback.sprayer.valid);
+  state.sprayer.valid = false;
+  feedback = decode_state(unpack(encode_state(state, 125)));
+  EXPECT_FALSE(feedback.sprayer.valid);
+}

@@ -12,10 +12,12 @@ import termios
 import time
 
 
-def control(seq, flags=0, linear=0., angular=0., lift=False, extra=b''):
+def control(seq, flags=0, linear=0., angular=0., lift=False, extra=b'', sprayer=None):
     payload = bytes([1, 1, flags, 0x10, 8]) + struct.pack('<ff', linear, angular)
     for ident in (0x20, 0x21, 0x30, 0x40, 0x50):
-        payload += bytes([ident, 5, int(lift and ident == 0x40)]) + struct.pack('<f', 0.)
+        on = (lift and ident == 0x40) or (sprayer is not None and ident == 0x50)
+        value = sprayer if sprayer is not None and ident == 0x50 else 0.
+        payload += bytes([ident, 5, int(on)]) + struct.pack('<f', value)
     payload += extra
     body = struct.pack('<BBHH', 1, 1, seq, len(payload)) + payload
     return b'\xfc\xfb' + body + struct.pack('<H', binascii.crc_hqx(body, 0)) + b'\xfd\xfe'
@@ -53,8 +55,11 @@ class Reader:
             assert set(blocks) == {1, 0x10, 0x20, 0x21, 0x30, 0x40, 0x50}
             uptime, seq, result, mode, faults, caps, age, errors = struct.unpack('<IHBBHHHH', blocks[1])
             chassis = struct.unpack('<ffffff', blocks[0x10])
+            spray_on, spray_target, spray_actual, spray_valid = struct.unpack('<BffB', blocks[0x50])
             out.append(dict(seq=seq, result=result, mode=mode, faults=faults, age=age, caps=caps,
-                            linear=chassis[0], left_target=chassis[2], right_target=chassis[3]))
+                            linear=chassis[0], left_target=chassis[2], right_target=chassis[3],
+                            spray_on=spray_on, spray_target=spray_target,
+                            spray_actual=spray_actual, spray_valid=spray_valid))
         return out
 
     def wait(self, predicate, timeout=2.):
@@ -118,7 +123,18 @@ def main():
             reader.wait(lambda s: s['seq'] == 5 and s['result'] == 1)
             os.write(fd, control(6, flags=2))
             reader.wait(lambda s: s['seq'] == 6 and s['mode'] == 2 and s['left_target'] == 0)
-            print('PASS: independent CRC/TLV, fragmented serial, sequence wrap, invalid CRC/value, unsupported/duplicate TLV, timeout and stop')
+            os.write(fd, control(7, flags=1, sprayer=37.5))
+            reader.wait(lambda s: s['seq'] == 7 and s['result'] == 0 and s['caps'] == 47
+                        and s['spray_on'] and s['spray_target'] == 37.5
+                        and s['spray_valid'] and s['spray_actual'] > 0)
+            os.write(fd, control(8, flags=1, sprayer=101.))
+            reader.wait(lambda s: s['seq'] == 8 and s['result'] == 2 and s['spray_target'] == 37.5)
+            reader.wait(lambda s: s['faults'] & 1 and not s['spray_on'] and s['spray_target'] == 0)
+            os.write(fd, control(9, flags=1, sprayer=25.))
+            reader.wait(lambda s: s['seq'] == 9 and s['spray_on'] and s['spray_target'] == 25.)
+            os.write(fd, control(10, flags=2))
+            reader.wait(lambda s: s['seq'] == 10 and not s['spray_on'] and s['spray_target'] == 0)
+            print('PASS: independent CRC/TLV, fragmented serial, sequence wrap, invalid CRC/value, unsupported/duplicate TLV, sprayer feedback, timeout and stop')
         finally:
             if fd is not None:
                 os.close(fd)

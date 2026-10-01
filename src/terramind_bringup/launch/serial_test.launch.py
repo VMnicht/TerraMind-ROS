@@ -42,9 +42,11 @@ def setup(context):
 
 
 def generate_launch_description():
+    share = Path(get_package_share_directory('terramind_bringup'))
+    geometry = yaml.safe_load((share/'config/sim.yaml').read_text())['sim_interface_node']['ros__parameters']
     return LaunchDescription([
         DeclareLaunchArgument('panel', default_value='false'),
-        DeclareLaunchArgument('capabilities', default_value='15',
-                              description='Emulated capability mask: 15=current board, 63=all actuators'),
+        DeclareLaunchArgument('capabilities', default_value=str(geometry['capabilities']),
+                              description='Emulated capability mask: 47=current board with sprayer, 15=legacy, 63=all actuators'),
         OpaqueFunction(function=setup),
     ])
