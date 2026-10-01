@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package format="3">
+  <name>terramind_transport</name>
+  <version>0.1.0</version>
+  <description>TerraMind mower PC control and simulation.</description>
+  <maintainer email="maintainer@example.com">TerraMind maintainers</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

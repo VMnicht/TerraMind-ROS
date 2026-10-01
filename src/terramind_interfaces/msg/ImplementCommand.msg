@@ -1,0 +1,11 @@
+std_msgs/Header header
+bool left_on
+float32 left_rpm
+bool right_on
+float32 right_rpm
+bool mower_on
+float32 mower_percent
+bool lift_on
+float32 lift_mm
+bool sprayer_on
+float32 sprayer_percent

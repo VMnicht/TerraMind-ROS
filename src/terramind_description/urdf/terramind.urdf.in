@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Lightweight visual model. Geometry substitutions are made by sim.launch.py. -->
+<robot name="terramind">
+  <material name="body_green"><color rgba="0.12 0.45 0.22 1"/></material>
+  <material name="tire"><color rgba="0.10 0.11 0.12 1"/></material>
+  <material name="front"><color rgba="0.95 0.55 0.10 1"/></material>
+  <link name="base_link">
+    <visual><origin xyz="0 0 0.10"/><geometry><box size="0.60 0.34 0.16"/></geometry><material name="body_green"/></visual>
+    <visual><origin xyz="0.27 0 0.20"/><geometry><box size="0.06 0.22 0.04"/></geometry><material name="front"/></visual>
+  </link>
+  <link name="left_wheel">
+    <visual><origin rpy="1.57079632679 0 0"/><geometry><cylinder radius="@WHEEL_RADIUS@" length="0.06"/></geometry><material name="tire"/></visual>
+  </link>
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/><child link="left_wheel"/><origin xyz="0 @HALF_TRACK@ 0"/><axis xyz="0 1 0"/>
+  </joint>
+  <link name="right_wheel">
+    <visual><origin rpy="1.57079632679 0 0"/><geometry><cylinder radius="@WHEEL_RADIUS@" length="0.06"/></geometry><material name="tire"/></visual>
+  </link>
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/><child link="right_wheel"/><origin xyz="0 @NEG_HALF_TRACK@ 0"/><axis xyz="0 1 0"/>
+  </joint>
+</robot>

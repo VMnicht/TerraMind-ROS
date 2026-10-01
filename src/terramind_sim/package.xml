@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package format="3">
+  <name>terramind_sim</name>
+  <version>0.1.0</version>
+  <description>TerraMind mower PC control and simulation.</description>
+  <maintainer email="maintainer@example.com">TerraMind maintainers</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>terramind_protocol</depend>
+  <depend>terramind_transport</depend>
+  <depend>terramind_control</depend>
+  <depend>terramind_mcu</depend>
+  <depend>terramind_interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>std_srvs</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

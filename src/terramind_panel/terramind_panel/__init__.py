@@ -1,0 +1,1 @@
+"""TerraMind control panel."""

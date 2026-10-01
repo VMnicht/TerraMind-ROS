@@ -1,0 +1,15 @@
+mcu_serial_node:
+  ros__parameters:
+    # auto: identify the unique board by its unsolicited v1 status frames.
+    # An explicit path bypasses discovery and keeps the manual connection mode.
+    device: auto
+    discovery_patterns:
+      - /dev/serial/by-id/*
+      - /dev/ttyUSB*
+      - /dev/ttyACM*
+    # Shared listening window for all candidates; increase for slow board startup.
+    discovery_listen_s: 0.6
+    baud: 115200
+    tx_period_ms: 20
+    reconnect_interval_s: 1.0
+    simulated: false

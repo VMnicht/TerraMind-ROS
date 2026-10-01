@@ -1,0 +1,25 @@
+# ROS workspace build products and runtime logs
+/build/
+/install/
+/log/
+
+# Local agent settings and credentials
+/.agents/
+/.codex/
+.env
+.env.*
+!.env.example
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Recorded ROS data
+*.db3
+*.mcap
+
+# Editor and OS temporary files
+*.swp
+*.swo
+.DS_Store

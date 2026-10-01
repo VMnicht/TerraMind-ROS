@@ -1,0 +1,9 @@
+# Real machine calibration only. Zero means UNKNOWN, not a physical dimension.
+# The serial driver sends chassis m/s and rad/s without these dimensions.
+robot:
+  geometry_calibrated: false
+  wheel_diameter_m: 0.0
+  wheel_separation_m: 0.0
+  # Actual RPM axis and gear ratio must be confirmed against firmware.
+  rpm_feedback_axis: unconfirmed
+  motor_to_wheel_ratio: 0.0

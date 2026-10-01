@@ -1,0 +1,20 @@
+# header.stamp is PC receive time, NOT sensor measurement time.
+std_msgs/Header header
+uint64 connection_id
+bool link_ready
+bool simulated
+uint16 frame_seq
+uint32 uptime_ms
+uint16 last_command_seq
+uint8 result
+uint8 mode
+uint16 faults
+uint16 capabilities
+uint16 command_age_ms
+uint16 rx_error_count
+ChassisState chassis
+SpreaderState left_spreader
+SpreaderState right_spreader
+MowerState mower
+LiftState lift
+SprayerState sprayer

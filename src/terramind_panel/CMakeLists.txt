@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.16)
+project(terramind_panel)
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(${PROJECT_NAME})
+install(PROGRAMS scripts/control_panel scripts/panel_integration_test.py DESTINATION lib/${PROJECT_NAME})
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(panel_controls test/test_controls.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
+endif()
+ament_package()

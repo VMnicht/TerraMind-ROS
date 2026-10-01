@@ -1,0 +1,60 @@
+"""Protocol ranges and immutable, complete operator selections (no ROS dependency)."""
+from dataclasses import dataclass, replace
+import math
+
+
+@dataclass(frozen=True)
+class ActuatorField:
+    key: str
+    title: str
+    value_field: str
+    unit: str
+    minimum: float
+    maximum: float
+    step: float
+    bit: int
+
+
+ACTUATORS = (
+    ActuatorField('left', '左播撒', 'left_rpm', 'RPM', -500, 500, 10, 1),
+    ActuatorField('right', '右播撒', 'right_rpm', 'RPM', -500, 500, 10, 2),
+    ActuatorField('mower', '割草刀盘', 'mower_percent', '%', 0, 100, 1, 3),
+    ActuatorField('lift', '刀盘升降', 'lift_mm', 'mm', 0, 1000, 5, 4),
+    ActuatorField('sprayer', '喷洒装置', 'sprayer_percent', '%', 0, 100, 1, 5),
+)
+
+
+@dataclass(frozen=True)
+class Selection:
+    linear_mps: float = 0.0
+    angular_radps: float = 0.0
+    left_on: bool = False
+    left_rpm: float = 0.0
+    right_on: bool = False
+    right_rpm: float = 0.0
+    mower_on: bool = False
+    mower_percent: float = 0.0
+    lift_on: bool = False
+    lift_mm: float = 0.0
+    sprayer_on: bool = False
+    sprayer_percent: float = 0.0
+
+    def validate(self, capabilities):
+        for label, value, low, high in (
+                ('线速度', self.linear_mps, -.35, .35),
+                ('角速度', self.angular_radps, -2., 2.)):
+            if not math.isfinite(value) or not low <= value <= high:
+                raise ValueError(f'{label}超出范围 [{low}, {high}]')
+        if not capabilities & 1 and (self.linear_mps or self.angular_radps):
+            raise ValueError('当前板卡不支持底盘运动')
+        for field in ACTUATORS:
+            value = getattr(self, field.value_field)
+            if not math.isfinite(value) or not field.minimum <= value <= field.maximum:
+                raise ValueError(f'{field.title}目标超出协议范围')
+            if getattr(self, field.key + '_on') and not capabilities & (1 << field.bit):
+                raise ValueError(f'当前板卡不支持{field.title}')
+
+    def normalized(self):
+        # Preserve the editable draft; unused blocks are transmitted with zero targets.
+        changes = {f.value_field: 0.0 for f in ACTUATORS if not getattr(self, f.key + '_on')}
+        return replace(self, **changes)
