@@ -4,6 +4,7 @@
 set -eo pipefail
 
 workspace_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$workspace_dir/scripts/native_gui_env.sh"
 rebuild_requested=false
 panel_arguments=()
 while (($#)); do

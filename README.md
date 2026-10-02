@@ -15,6 +15,12 @@ source install/setup.bash
 
 后续每个新终端均需加载 ROS 和本工作区的 `install/setup.bash`。
 
+### Snap 终端中的图形程序启动失败
+
+如果出现 `/snap/core20/.../libpthread.so.0: undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE`，说明系统程序混用了 Snap 内的运行库。Snap 编辑器终端继承的 `GTK_PATH`、GIO/Qt 插件路径或动态库路径可能导致此问题。`start_panel.sh`、`start_sim.sh` 和 `start_debug.sh` 会在加载 ROS 前过滤相关变量中的 Snap 路径，保留其他路径；清理仅作用于启动进程及其子进程，不修改终端或系统配置。脚本修改后直接重新启动，无需编译。
+
+如果直接运行 `ros2` 命令，可先在当前终端执行 `source scripts/native_gui_env.sh`，再加载 ROS 和工作区环境。`Ignoring XDG_SESSION_TYPE=wayland on Gnome` 是 Qt 选择 X11 后端的提示，本身不会造成上述库符号错误，不需要通过强制 Wayland 来处理。
+
 ## 图形化调试总面板
 
 日常调试可以直接打开工程中的 `TerraMind-Debug.desktop`（当前工作区路径为 `/home/tang/TerraMind`），或使用桌面上的 **TerraMind 调试总面板** 快捷方式。也可以运行 `./start_debug.sh`。总面板本身只依赖系统 Python 和 PyQt5，无需提前 source ROS，也无需先构建工作区。
