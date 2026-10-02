@@ -1,4 +1,4 @@
-"""Launcher regressions: process ownership, command quoting and UI orchestration."""
+"""总面板回归：进程组清理、命令引用、任务互斥和构建后启动。"""
 import os
 from pathlib import Path
 import signal
@@ -32,7 +32,7 @@ def wait(app, predicate, timeout=5):
 def alive(pid):
     path = Path(f'/proc/{pid}/stat')
     try:
-        # An exited orphan may await reaping by the container's init.
+        # 已退出的孤儿进程可能仍等待容器 init 回收，不能误判为仍在运行。
         return path.read_text().split(') ', 1)[1].split()[0] != 'Z'
     except FileNotFoundError:
         return False
@@ -97,8 +97,8 @@ def test_shell_arguments_cannot_execute_user_input(tmp_path):
     device = f'/dev/a; touch {marker}; $(touch {marker})'
     task = backend_task('real', device=device)
     command = shell_command(workspace, task)
-    # Replace ROS environment + ros2 with a harmless argv printer, then execute
-    # the actual generated shell to verify argument boundaries.
+    # 用只打印参数的程序替代 ROS 命令，再执行实际生成的 shell，
+    # 验证用户输入始终保持参数边界，不能成为额外命令。
     command[2] = command[2].replace('source /opt/ros/humble/setup.bash',
                                    "ros2() { printf '%s\\n' \"$@\"; }; export -f ros2")
     command[2] = command[2].replace('exec ros2 ', 'ros2 ')

@@ -1,3 +1,4 @@
+# 实机入口：控制管理 + 串口后端 + 可选面板；不启动仿真或机器人模型。
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -12,6 +13,7 @@ def generate_launch_description():
     share = Path(get_package_share_directory('terramind_bringup'))
     serial = share/'config/serial.yaml'
     serial_parameters = yaml.safe_load(serial.read_text())['mcu_serial_node']['ros__parameters']
+    # 先读取 YAML 字典再覆盖 device，确保命令行手动端口优先于 device:auto。
     default_device = serial_parameters['device']
     common = str(share/'config/control.yaml')
     return LaunchDescription([

@@ -50,6 +50,7 @@ bool CommandGuard::receive(
     return false;
   }
   if (!c.enable || c.stop) {
+    // 先看到明确的停机状态才能解除故障锁；恢复消息流本身不构成重新使能。
     may_enable_ = true;
     latest_ = protocol::stopped();
     received_ = now;
@@ -66,6 +67,7 @@ bool CommandGuard::receive(
 }
 protocol::Control CommandGuard::sample(double now, bool link_ready)
 {
+  // 发送周期主动采样，而不是只在收到消息时检查，才能发现上游静默退出。
   if (!link_ready) {
     if (latest_.enable) {
       trip("link not ready");

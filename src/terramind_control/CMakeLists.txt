@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# 同时安装控制管理节点并导出 CommandGuard，供两种后端复用保护逻辑。
 project(terramind_control)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

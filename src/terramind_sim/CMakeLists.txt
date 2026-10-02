@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# 共享行为/运动模型，分别供 ROS 直接仿真与普通 PTY 模拟器进程调用。
 project(terramind_sim)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

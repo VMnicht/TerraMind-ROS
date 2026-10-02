@@ -9,6 +9,7 @@ inline bool fresh_stamp(
   const builtin_interfaces::msg::Time & stamp, const rclcpp::Time & now,
   double timeout)
 {
+  // ROS 时间只用于判断消息年龄，允许最多 20 ms 的超前误差。
   double t = double(stamp.sec) + stamp.nanosec * 1e-9;
   double age = now.seconds() - t;
   return t > 0 && age >= -0.020 && age <= timeout;
@@ -16,7 +17,7 @@ inline bool fresh_stamp(
 inline double source_time_on_steady_clock(
   const builtin_interfaces::msg::Time & stamp, const rclcpp::Time & now)
 {
-  // Transport delay consumes the validity budget instead of renewing it on arrival.
+  // 将源时间映射到单调时钟；接收旧消息不能重新获得完整的超时预算。
   const double source = double(stamp.sec) + stamp.nanosec * 1e-9;
   return steady_seconds() - std::max(0.0, now.seconds() - source);
 }
@@ -29,6 +30,7 @@ inline protocol::Control from_ros(const terramind_interfaces::msg::ControlComman
 }
 inline void fill_ros(const protocol::Control & c, terramind_interfaces::msg::ControlCommand & m)
 {
+  // 外层与作业快照共用时间戳，避免底盘和作业字段表示不同时间的目标。
   m.enable = c.enable;
   m.stop = c.stop;
   m.linear_mps = c.linear;

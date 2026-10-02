@@ -21,6 +21,7 @@ void DifferentialDriveModel::reset()
 }
 double DifferentialDriveModel::left_rpm(double v, double w)const
 {
+  // 车轮线速度 v_left = v - w*轮距/2；除以轮周长后换算成每分钟转数。
   return (v - w * geometry_.wheel_separation / 2) * 60 / (PI * geometry_.wheel_diameter);
 }
 double DifferentialDriveModel::right_rpm(double v, double w)const
@@ -33,12 +34,14 @@ void DifferentialDriveModel::step(double v, double w, double dt)
     throw std::invalid_argument("invalid dynamics input");
   }
   while (dt > 1e-9) {
+    // 每个积分步不超过 10 ms，降低调度抖动对加速度约束和轨迹的影响。
     double h = std::min(dt, 0.01);
     dt -= h;
     double previous_v = linear, previous_w = angular;
     linear += std::clamp(v - linear, -linear_acceleration_ * h, linear_acceleration_ * h);
     angular += std::clamp(w - angular, -angular_acceleration_ * h, angular_acceleration_ * h);
     double vm = (linear + previous_v) / 2, wm = (angular + previous_w) / 2;
+    // 用步内平均速度积分圆弧；角速度接近零时改用直线公式避免除零。
     double dyaw = wm * h;
     if (std::abs(wm) > 1e-8) {
       x += vm / wm * (std::sin(yaw + dyaw) - std::sin(yaw));

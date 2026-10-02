@@ -1,3 +1,4 @@
+// 仅使用 PTY 验证字节读写和设备锁，不访问物理串口。
 #include "terramind_transport/serial_port.hpp"
 #include <gtest/gtest.h>
 #include <pty.h>

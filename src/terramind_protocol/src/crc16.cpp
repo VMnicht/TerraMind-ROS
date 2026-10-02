@@ -3,6 +3,7 @@ namespace terramind::protocol
 {
 uint16_t crc16(const uint8_t * data, size_t size)
 {
+  // XMODEM 参数：初值 0，多项式 0x1021，不反射输入/输出，最终不异或。
   uint16_t crc = 0;
   for (size_t i = 0; i < size; ++i) {
     crc ^= static_cast<uint16_t>(data[i]) << 8;

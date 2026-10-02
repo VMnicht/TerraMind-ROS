@@ -1,3 +1,4 @@
+// 会话回归：零指令确认、重复状态、旧 ACK、板卡重启和序号回绕。
 #include "terramind_mcu/mcu_session.hpp"
 #include <gtest/gtest.h>
 using terramind::mcu::Session;

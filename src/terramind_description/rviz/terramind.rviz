@@ -1,3 +1,4 @@
+# 二维仿真的三维观察配置；只影响显示，不改变控制目标或运动模型。
 Panels:
   - Class: rviz_common/Displays
     Name: Displays
@@ -29,11 +30,13 @@ Visualization Manager:
         Value: /sim/ground_truth
       Keep: 200
   Tools:
+    # 默认使用相机工具；切到 Select 后可手动点 Move Camera 恢复视角操作。
     - Class: rviz_default_plugins/MoveCamera
     - Class: rviz_default_plugins/Select
     - Class: rviz_default_plugins/FocusCamera
   Views:
     Current:
+      # Orbit：左键旋转，中键或 Shift+左键平移，滚轮缩放。
       Class: rviz_default_plugins/Orbit
       Name: Current View
       Target Frame: <Fixed Frame>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated ROS process integration test. Only launches simulated backends."""
+"""ROS 进程联调：只启动直接仿真或 PTY 后端，使用隔离 ROS 域。"""
 import argparse
 import os
 from pathlib import Path
@@ -94,7 +94,7 @@ def main():
             pump(.3,stream=True,implement=True)
             if a.mode=='sim':
                 assert poses and poses[-1].pose.pose.position.x>0
-            # Stop publishing implements while keeping cmd_vel alive: independent watchdog.
+            # 保持底盘心跳，仅停止作业指令，验证作业目标也有独立有效期。
             wait(lambda: not control[-1].enabled and board[-1].mode==2,stream=True)
             assert board[-1].chassis.left_target_rpm==0 and not board[-1].mower.on
             assert not board[-1].sprayer.on and board[-1].sprayer.target_percent==0
@@ -124,7 +124,7 @@ def main():
                 emulator=launch('terramind_sim','serial_board_emulator','--link',link)
                 wait(lambda: board[-1].connection_id!=old_id and board[-1].link_ready and control[-1].link_ready,timeout=6)
                 assert not control[-1].enabled and board[-1].mode==2
-            # Hard crash of the manager must be caught by the backend's own watchdog.
+            # 强制终止控制管理进程，验证后端仍能独立检测超时并停止。
             arm();wait(lambda: board[-1].mode==1 and board[-1].chassis.linear_mps>0,stream=True)
             manager.kill();manager.wait(timeout=3)
             wait(lambda: board[-1].mode==2 and board[-1].chassis.left_target_rpm==0)

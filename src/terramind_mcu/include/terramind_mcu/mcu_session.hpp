@@ -4,13 +4,15 @@
 #include <string>
 namespace terramind::mcu
 {
+// 跟踪串口连接的零指令握手和状态新鲜度；时间参数均使用单调时钟秒数。
+// 由后端线程独占，不在这里执行串口读写或发布 ROS 消息。
 class Session
 {
 public:
   explicit Session(double timeout = 0.150);
   void reset(uint64_t id, double now);
   void sent(uint16_t seq, const protocol::Control & c, double now);
-  // False means a duplicate/out-of-order status that must not renew freshness.
+  // 返回 false 表示重复/倒序状态，调用者不得据此发布“新鲜”反馈。
   bool observe(const protocol::State & s, uint16_t frame_seq, double now);
   bool expired(double now) const;
   bool ready = false, rebooted = false;

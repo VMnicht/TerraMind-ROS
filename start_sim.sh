@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Also support invoking this entry point with `sh start_sim.sh`.
+# 支持用 sh start_sim.sh 调用；实际逻辑依赖 Bash 数组，需切换解释器。
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -eo pipefail
 
@@ -53,7 +53,7 @@ if [[ ! -r "$terramind_ros_setup" ]]; then
   printf '未找到 ROS 2 Humble：%s\n' "$terramind_ros_setup" >&2
   exit 1
 fi
-# ROS setup scripts may read unset variables, so do not enable nounset here.
+# ROS 环境脚本可能读取未定义变量，因此这里不要开启 set -u。
 source "$terramind_ros_setup"
 cd "$workspace_dir"
 
@@ -110,5 +110,5 @@ else
   printf '启动二维仿真。可在控制面板中设置目标并开始发送。按 Ctrl+C 退出。\n'
 fi
 
-# Let ros2 launch receive terminal signals and shut down all its child nodes.
+# exec 将终端信号直接交给 ros2 launch，由它统一关闭所启动的节点。
 exec ros2 launch terramind_bringup sim.launch.py "${launch_arguments[@]}"

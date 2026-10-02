@@ -12,6 +12,8 @@ namespace tc = terramind::control;
 namespace mcu = terramind::mcu;
 namespace ts = terramind::sim;
 namespace ti = terramind_interfaces::msg;
+// ROS 直接仿真后端，与 mcu_serial_node 使用同一组控制/状态接口，互斥运行。
+// 单线程定时器推进模型；不经过串口字节链路，因此不能代替 PTY 协议测试。
 class SimInterface : public rclcpp::Node
 {
 public:
@@ -80,6 +82,7 @@ public:
 private:
   void reset_model()
   {
+    // 复位不仅清零位置，还更换连接代次，强制上层撤销使能并丢弃旧目标。
     double t = tc::steady_seconds();
     model_->reset(t);
     session_.reset(tc::new_connection_id(), t);
@@ -90,6 +93,7 @@ private:
   }
   void tick()
   {
+    // 使用真实单调时钟；5 ms 调度中分别维护 20 ms 发令和 50 ms 状态周期。
     double t = tc::steady_seconds();
     if (session_.expired(t)) {
       session_.reset(tc::new_connection_id(), t);
@@ -133,6 +137,7 @@ private:
   }
   void publish_truth()
   {
+    // 发布无噪声真值到专用话题，不能把它当成未来导航板的定位测量。
     auto stamp = now();
     const auto & d = model_->drive();
     nav_msgs::msg::Odometry o;
@@ -158,6 +163,7 @@ private:
     j.header.stamp = stamp;
     j.name = {"left_wheel_joint", "right_wheel_joint"};
     j.position = {d.left_position, d.right_position};
+    // JointState 角速度使用 rad/s，而协议轮速反馈使用 RPM。
     j.velocity =
     {model_->state().chassis.left_actual * 0.104719755,
       model_->state().chassis.right_actual * 0.104719755};

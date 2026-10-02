@@ -2,6 +2,8 @@
 
 默认所有节点使用相对话题名，可在一致的命名空间下运行。发布者与订阅者的控制 QoS 为 reliable、volatile、keep last 1。第一阶段仅支持单个上层控制源，未实现多源仲裁。不要在同一命名空间并行启动 real、sim 和 serial_test；运行多个机器人或比较模式时应使用隔离的 ROS 域。
 
+节点组成和方向图见 [节点与数据流](节点与数据流.md)，新增接口的修改步骤见 [开发指南](开发指南.md)。下表的话题名称在默认根命名空间中带 `/` 前缀；服务单独标注类型，不能当成话题发布。
+
 | 接口 | 类型 | 方向和语义 |
 |---|---|---|
 | cmd_vel | geometry_msgs/TwistStamped | 上层至控制管理；仅 linear.x 为 m/s，angular.z 为 rad/s |
@@ -17,6 +19,28 @@
 | sim/reset | std_srvs/Trigger | 清零模型并更换连接标识，需要重新使能 |
 | sim/drop_commands | std_srvs/SetBool | 仿真故障注入，丢弃后端至控制板模型的指令 |
 | sim/drop_status | std_srvs/SetBool | 仿真故障注入，丢弃模型至后端的状态 |
+
+上表简写类型在 ROS 2 CLI 中使用完整名称，例如 `geometry_msgs/msg/TwistStamped`、`terramind_interfaces/msg/McuState`、`std_srvs/srv/SetBool`。二维仿真启用模型时还会出现 `robot_description`（`std_msgs/msg/String`）和标准 TF 接口；日志及参数事件由 ROS 基础设施提供。
+
+## 自定义消息目录
+
+当前只有一个自定义接口包 `terramind_interfaces`，包含九个 `.msg`，没有自定义 `.srv` 或 `.action`。单位、范围和字段用途也已写在消息文件的中文注释中。
+
+| 消息 | 源码 | 使用位置 |
+|---|---|---|
+| ImplementCommand | [定义](../terramind_interfaces/msg/ImplementCommand.msg) | 作业输入话题及完整快照的嵌套字段 |
+| ControlCommand | [定义](../terramind_interfaces/msg/ControlCommand.msg) | `mcu/command` |
+| ControlStatus | [定义](../terramind_interfaces/msg/ControlStatus.msg) | `control/status` |
+| McuState | [定义](../terramind_interfaces/msg/McuState.msg) | `mcu/state` |
+| ChassisState | [定义](../terramind_interfaces/msg/ChassisState.msg) | `McuState.chassis` |
+| SpreaderState | [定义](../terramind_interfaces/msg/SpreaderState.msg) | `McuState.left_spreader/right_spreader` |
+| MowerState | [定义](../terramind_interfaces/msg/MowerState.msg) | `McuState.mower` |
+| LiftState | [定义](../terramind_interfaces/msg/LiftState.msg) | `McuState.lift` |
+| SprayerState | [定义](../terramind_interfaces/msg/SprayerState.msg) | `McuState.sprayer` |
+
+五种装置状态不各自单独发布话题。状态帧序号 `frame_seq` 与 PC 的 `connection_id` 含义不同：前者为线上 uint16 帧计数，后者隔离 PC 的连接代次。
+
+## 有效期与反馈语义
 
 ControlCommand 中 connection_id 必须匹配当前 McuState。控制帧自身 uint16 序号由后端生成，不由业务层指定。Header 时间戳按 PC/ROS 时间填写；上层周期推荐 20 ms。cmd_vel 的 frame_id 允许为空（约定 base_link）或 base_link，其他坐标系将被拒绝。真实超时计时使用 steady clock，软件发送周期不是硬实时保证。
 

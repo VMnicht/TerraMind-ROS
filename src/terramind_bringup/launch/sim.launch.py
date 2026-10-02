@@ -1,3 +1,4 @@
+# 二维仿真入口：由同一份尺寸配置生成运动模型与 URDF，避免显示和运动不一致。
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -29,8 +30,7 @@ def generate_launch_description():
                               description='Simulation capability mask: 47=current board with sprayer, 15=legacy, 63=all actuators'),
         Node(package='terramind_control', executable='control_manager_node', parameters=[common], output='screen'),
         Node(package='terramind_sim', executable='sim_interface_node',
-             # Merge before emitting the parameter file: a node-specific YAML
-             # entry can otherwise override the generated wildcard arguments.
+             # 先合并字典再生成参数文件，保证命令行能力位覆盖 YAML 节点级配置。
              parameters=[common, {**geometry, 'capabilities': ParameterValue(LaunchConfiguration('capabilities'), value_type=int)}], output='screen'),
         Node(package='terramind_panel', executable='control_panel', parameters=[common, {'backend_label': '二维运动仿真'}],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),

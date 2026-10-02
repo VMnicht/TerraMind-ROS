@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the actual Qt controls against isolated simulation/PTY processes."""
+"""用真实 Qt 控件联调隔离的二维仿真/PTY 进程，验证交互和停机边界。"""
 import argparse
 import os
 from pathlib import Path
@@ -114,7 +114,7 @@ def main():
             if args.capabilities & 32:
                 assert node.board.sprayer.on and node.board.sprayer.feedback_valid
                 assert node.board.sprayer.actual_percent > 0
-                # Sprayer draft/apply, then off-zero, independently of chassis targets.
+                # 喷洒独立验证草稿/应用和关闭归零，不借助底盘目标变化。
                 window.editors['sprayer_percent'].setValue(40.)
                 pump(.15)
                 assert node.board.sprayer.target_percent == 25.
@@ -131,7 +131,7 @@ def main():
                 window.refresh()
                 assert window.grab().save(str(args.screenshot.resolve()))
 
-            # Editing a draft must not change the transmitted snapshot before Apply.
+            # 仅编辑草稿不得改变已发送快照，点击应用后才生效。
             old_sequence = node.board.last_command_seq
             window.editors['linear_mps'].setValue(-.08)
             window.editors['left_rpm'].setValue(90.)
@@ -142,7 +142,7 @@ def main():
             wait(lambda: abs(node.board.chassis.linear_mps + .08) < 1e-5
                  and node.board.left_spreader.target_rpm == 90.)
             assert node.board.last_command_seq != old_sequence
-            # Off blocks must transmit zero, while preserving their editable target.
+            # 关闭装置发送零目标，但保留草稿编辑值。
             window.checks['right'].setChecked(False)
             window.apply_button.click()
             wait(lambda: not node.board.right_spreader.on and node.board.right_spreader.target_rpm == 0)
@@ -155,14 +155,14 @@ def main():
             window.disable_button.click()
             wait(stopped)
 
-            # Deliberately freeze Qt; no publishing worker may retain old targets.
+            # 故意阻塞 Qt，确认没有后台发送线程继续为旧目标续期。
             start()
             time.sleep(.35)
             wait(stopped)
             pump(.2)
             assert stopped()
 
-            # Loss/replacement of the backend requires explicit operator restart.
+            # 后端丢失或更换后，必须由用户重新开始发送。
             start()
             if args.mode == 'sim':
                 client = node.create_client(SetBool, 'sim/drop_status')
@@ -186,7 +186,7 @@ def main():
                 wait(lambda: not node.health_error() and node.board.connection_id != old_id)
                 wait(stopped)
 
-            # Stop during the initial Stop barrier, then during the Enable stage.
+            # 分别在初始 Stop 确认和 Enable 阶段停止，验证异步竞态处理。
             window.refresh()
             window.start_button.click()
             window.stop_button.click()
@@ -201,7 +201,7 @@ def main():
             pump(.3)
             assert stopped()
 
-            # An unresolved service response must expire locally and allow recovery.
+            # 服务无响应应在本地超时释放，之后仍可重新开始。
             if args.mode == 'sim':
                 window.refresh()
                 manager.send_signal(signal.SIGSTOP)
@@ -215,7 +215,7 @@ def main():
                 pump(.3)
                 assert stopped()
 
-            # Merely connecting a second input publisher must block panel ownership.
+            # 第二个输入发布者即使未发消息，也应触发面板冲突检查。
             start()
             conflict = node.create_publisher(TwistStamped, 'cmd_vel', 1)
             wait(stopped)

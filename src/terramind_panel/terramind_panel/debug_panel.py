@@ -1,4 +1,4 @@
-"""Desktop debug launcher. ROS commands run in supervised child processes."""
+"""桌面调试总面板：在受监督的子进程中运行 ROS 命令，本身不是 ROS 节点。"""
 import argparse
 import codecs
 from dataclasses import dataclass
@@ -54,6 +54,7 @@ QPlainTextEdit { background: #142630; color: #d9e7ee; border-radius: 6px;
 
 @dataclass
 class Task:
+    # overlay 决定是否加载本工作区；首次构建时不能依赖尚不存在的 install。
     key: str
     title: str
     command: list
@@ -77,7 +78,7 @@ def backend_task(mode, capabilities=CURRENT_CAPABILITIES, rviz=True, panel=True,
 
 
 def shell_command(workspace, task):
-    # All user-controlled paths and arguments are shell-quoted, never interpolated as code.
+    # 所有可编辑路径和参数都先做 shell 引用，不能将用户输入直接拼成代码。
     parts = ['set -e', 'source /opt/ros/humble/setup.bash']
     if task.overlay:
         parts.append('source ' + shlex.quote(str(workspace / 'install/local_setup.bash')))
@@ -89,6 +90,7 @@ def shell_command(workspace, task):
 
 
 class Job(QtCore.QObject):
+    # 一个 Job 对应一个独立监督进程；QProcess 只负责异步日志和状态通知。
     changed = QtCore.pyqtSignal()
     completed = QtCore.pyqtSignal(object)
 
@@ -135,6 +137,7 @@ class Job(QtCore.QObject):
         self.changed.emit()
 
     def read(self):
+        # QProcess 读取边界不等于 UTF-8 字符边界，增量解码避免中文被拆坏。
         self.append(self.decoder.decode(bytes(self.process.readAllStandardOutput())))
 
     def started(self):
@@ -365,6 +368,7 @@ class DebugWindow(QtWidgets.QMainWindow):
         return all((self.workspace / path).exists() for path in required)
 
     def request(self, task):
+        # 在界面禁用之外再次校验互斥；缺少产物时只排队一个构建后任务。
         if self.closing or self.pending is not None or self.active(task.key) or self.active('build'):
             self.notice.setText('该功能正在运行，或正在等待构建；请先停止现有任务。')
             return
@@ -410,6 +414,7 @@ class DebugWindow(QtWidgets.QMainWindow):
         self.update_controls()
 
     def job_finished(self, job):
+        # 只有编译成功且用户未取消/关闭，才启动排队任务。
         if job.task.key == 'build' and self.pending is not None:
             pending, self.pending = self.pending, None
             if job.state == '已完成' and not self.closing:
@@ -503,6 +508,7 @@ def main():
     directory = workspace / 'log/debug'
     directory.mkdir(parents=True, exist_ok=True)
     lock = (directory / 'launcher.lock').open('w')
+    # 每个工作区只开一个总面板；锁文件随 log 忽略，不进入 Git。
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -510,7 +516,7 @@ def main():
         return 0
     window = DebugWindow(workspace)
     window.show()
-    # Let terminal/desktop termination follow the same asynchronous cleanup path.
+    # 终端信号和桌面关闭使用同一异步清理流程，不绕过对子进程的回收。
     signal.signal(signal.SIGINT, lambda *_: window.close())
     signal.signal(signal.SIGTERM, lambda *_: window.close())
     return app.exec_()

@@ -1,3 +1,4 @@
+// 协议回归：黄金帧、CRC、任意分片、失步恢复、TLV 兼容和非法值拒绝。
 #include "terramind_protocol/frame_parser.hpp"
 #include <gtest/gtest.h>
 #include <limits>
@@ -144,7 +145,7 @@ TEST(Protocol, SprayerV1WireAndReportedCapability) {
   EXPECT_THROW(validate(c, 0x000f), ProtocolError);
   auto wire = encode_control(c, 123);
   ASSERT_EQ(wire.size(), 60u);
-  // The existing v1 block stays on/off + little-endian float32 percent.
+  // 既有 v1 喷洒块保持开关 + 小端 float32 百分比，接入硬件不改变字节布局。
   const Bytes spray_block{0x50, 5, 1, 0, 0, 0x16, 0x42};
   EXPECT_EQ(Bytes(wire.begin() + 49, wire.begin() + 56), spray_block);
   const auto decoded = decode_control(unpack(wire));

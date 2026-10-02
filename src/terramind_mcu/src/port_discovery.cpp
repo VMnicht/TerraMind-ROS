@@ -25,6 +25,7 @@ std::vector<std::string> serial_candidates(const std::vector<std::string> & patt
     for (size_t i = 0; i < expanded.gl_pathc; ++i) {
       struct stat info{};
       const std::string path = expanded.gl_pathv[i];
+      // stat 跟随符号链接，使用字符设备号去重而不是比较路径字符串。
       if (stat(path.c_str(), &info) == 0 && S_ISCHR(info.st_mode) &&
         devices.insert(info.st_rdev).second)
       {
@@ -100,6 +101,7 @@ DiscoveryResult discover_control_board(
   if (candidates.empty()) {
     return result;
   }
+  // 所有已打开候选共享监听窗口，不为每个无关串口串行等待完整时长。
   const auto deadline = std::chrono::steady_clock::now() +
     std::chrono::duration<double>(listen_seconds);
   while (keep_running() && std::chrono::steady_clock::now() < deadline) {
@@ -123,8 +125,8 @@ DiscoveryResult discover_control_board(
   if (!keep_running()) {
     return result;
   }
-  // A device that disappeared or stopped producing state during the scan is
-  // not selectable. Keep its descriptor; do not reopen a possibly renamed port.
+  // 扫描结束时仍须有 150 ms 内的新状态；曾匹配但已静默的设备不可选择。
+  // 保留原句柄，避免重开路径时 USB 设备编号已经被系统重新分配。
   Candidate * selected = nullptr;
   for (auto & candidate : candidates) {
     if (candidate.port && candidate.probe.matched() &&

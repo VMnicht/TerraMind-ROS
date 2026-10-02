@@ -12,6 +12,8 @@ namespace tp = terramind::protocol;
 namespace tc = terramind::control;
 namespace mcu = terramind::mcu;
 namespace ti = terramind_interfaces::msg;
+// ROS 回调只更新最新指令；独立工作线程持有串口、解析器和会话状态。
+// guard_/connection_/capabilities_/last_stamp_ 由 mutex_ 保护。
 class McuSerialNode : public rclcpp::Node
 {
 public:
@@ -84,13 +86,13 @@ public:
 private:
   void report(int level, const std::string & reason)
   {
-    // Shutdown can invalidate the ROS context while the serial worker exits.
+    // 工作线程退出时 ROS 上下文可能已失效，诊断发布不能妨碍串口停机。
     if (rclcpp::ok()) {
       try {
         diagnostics_->publish(
           mcu::diagnostic(now(), "mcu_serial", path_, level, reason, parser_.errors()));
       } catch (const rclcpp::exceptions::RCLError &) {
-        // The final wire stop below must not depend on ROS publication succeeding.
+        // 最后的串口停止帧不依赖 ROS 发布成功。
       }
     }
   }
@@ -152,6 +154,7 @@ private:
           parser_.reset();
           seq = 0;
           session_.reset(tc::new_connection_id(), t);
+          // 每次重连都重建会话、清空半帧和指令缓存，禁止沿用旧的运动目标。
           {
             std::lock_guard<std::mutex> lock(mutex_);
             connection_ = session_.connection_id;
@@ -169,12 +172,14 @@ private:
           throw std::runtime_error("status or handshake timeout");
         }
         if (t >= next_tx) {
+          // 到期只发送一个最新快照；发生调度延迟也不补发积压的旧命令。
           tp::Control c;
           {
             std::lock_guard<std::mutex> lock(mutex_);
             c = guard_.sample(t, session_.ready);
           }
           if (!session_.ready) {
+            // 识别出控制板仍不等于允许运动，先发送全零未使能快照完成握手。
             c = {};
           }
           port->write_all(tp::encode_control(c, seq));
@@ -213,7 +218,7 @@ private:
           next_report = t + 1;
         }
       } catch (const std::exception & e) {
-        // A stop is best effort; firmware timeout remains the fallback if TX is broken.
+        // 异常后尽力发送停止帧；TX 已损坏时依赖固件 250 ms 看门狗兜底。
         try {
           if (port && port->is_open()) {
             port->write_all(tp::encode_control(tp::stopped(), seq++));
@@ -233,6 +238,7 @@ private:
     }
     try {
       if (port && port->is_open()) {
+        // 正常退出也尝试停机；不能把“成功调用 write”当作机械已停止。
         port->write_all(tp::encode_control(tp::stopped(), seq));
       }
     } catch (...) {

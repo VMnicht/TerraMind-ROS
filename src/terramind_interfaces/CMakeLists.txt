@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# 集中生成自定义消息；新增 .msg 必须在 rosidl_generate_interfaces 中登记。
 project(terramind_interfaces)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

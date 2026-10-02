@@ -31,6 +31,7 @@ void BoardModel::receive(const tp::Frame & f, double now)
   }
   step(now);
   state_.system.last_command_seq = f.seq;
+  // 合法帧中的语义错误仍报告序号和拒绝原因，但不改变目标或续期看门狗。
   try {
     apply(tp::decode_control(f), f.seq, now);
   } catch (const tp::ProtocolError & e) {
@@ -52,6 +53,7 @@ void BoardModel::accept(const tp::Control & c, uint16_t seq, double now)
 void BoardModel::apply(const tp::Control & c, uint16_t seq, double now)
 {
   tp::validate(c, capabilities_);
+  // 只有整帧通过检查才接管 USART3；停机后保持接管，不退回其他控制口。
   accepted_ = c;
   owned_ = true;
   last_accepted_ = now;
@@ -66,7 +68,7 @@ void BoardModel::targets()
   bool active = owned_ && accepted_.enable && !accepted_.stop && !(state_.system.faults & 1);
   state_.system.mode = owned_ ? (active ? 1 : 2) : 0;
   tp::Control c = active ? accepted_ : tp::Control{};
-  // In this simulator these fields describe command targets; the real firmware must be checked separately.
+  // 这里 linear/angular 表示目标值；真实固件同名反馈字段的含义需独立核对。
   state_.chassis.linear = c.linear;
   state_.chassis.angular = c.angular;
   state_.chassis.left_target = drive_.left_rpm(c.linear, c.angular);
@@ -88,7 +90,8 @@ void BoardModel::step(double now)
   if (!std::isfinite(now) || now < last_step_) {
     throw std::invalid_argument("simulation clock must be monotonic; reset explicitly");
   }
-  // Split at the firmware deadline so a long step does not apply the stop retroactively.
+  // 大时间步跨过看门狗期限时，先推进到期限，再计算停机后的减速过程。
+  // 否则会把停止目标错误地应用到超时发生前的整段时间。
   if (owned_ && !(state_.system.faults & 1) && last_step_ < last_accepted_ + tp::FIRMWARE_TIMEOUT &&
     now > last_accepted_ + tp::FIRMWARE_TIMEOUT)
   {
@@ -108,6 +111,7 @@ void BoardModel::step(double now)
   state_.chassis.left_actual = drive_.left_rpm(drive_.linear, drive_.angular);
   state_.chassis.right_actual = drive_.right_rpm(drive_.linear, drive_.angular);
   double alpha = 1 - std::exp(-dt / 0.15);
+  // 作业反馈使用 0.15 s 一阶响应近似；只是模型输出，不等价于真实传感器。
   state_.left.actual += (state_.left.target - state_.left.actual) * alpha;
   state_.right.actual += (state_.right.target - state_.right.actual) * alpha;
   state_.lift.actual += (state_.lift.target - state_.lift.actual) * alpha;

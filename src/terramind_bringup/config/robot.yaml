@@ -1,9 +1,9 @@
-# Real machine calibration only. Zero means UNKNOWN, not a physical dimension.
-# The serial driver sends chassis m/s and rad/s without these dimensions.
+# 真实机器标定记录，当前 launch 不加载此文件；0 表示未知，不是物理尺寸。
+# 实机驱动直接下发 m/s、rad/s，不依赖这里的轮径和轮距。
 robot:
   geometry_calibrated: false
   wheel_diameter_m: 0.0
   wheel_separation_m: 0.0
-  # Actual RPM axis and gear ratio must be confirmed against firmware.
+  # RPM 反馈来自电机轴还是车轮轴、以及减速比，需与固件和机械参数核对。
   rpm_feedback_axis: unconfirmed
   motor_to_wheel_ratio: 0.0

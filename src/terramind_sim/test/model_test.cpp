@@ -1,3 +1,4 @@
+// 模型回归：控制权接管、250 ms 看门狗、整帧拒绝、差速运动和喷洒能力。
 #include "terramind_sim/board_model.hpp"
 #include "terramind_protocol/frame_parser.hpp"
 #include <gtest/gtest.h>

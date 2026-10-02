@@ -1,4 +1,4 @@
-"""Operator panel. Edits are drafts until Start or Apply is clicked."""
+"""控制面板视图：编辑内容先保留为草稿，点击开始或应用后才参与发送。"""
 import json
 import time
 
@@ -100,7 +100,7 @@ class PanelWindow(QtWidgets.QMainWindow):
         columns = QtWidgets.QHBoxLayout()
         columns.setSpacing(16)
         outer.addLayout(columns, 1)
-        # Scroll controls on small monitors; stop buttons remain outside this area.
+        # 小屏幕可滚动作业字段；停止按钮放在滚动区之外，始终可见。
         controls_scroll = QtWidgets.QScrollArea()
         controls_scroll.setWidgetResizable(True)
         controls_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
@@ -217,7 +217,7 @@ class PanelWindow(QtWidgets.QMainWindow):
         self.refresh()
 
     def draft(self, commit=True):
-        # Interpret typed text even when the editor has not lost keyboard focus yet.
+        # 控件尚未失焦时也提交正在输入的文本，避免发送上一次缓存数值。
         if commit:
             for editor in self.editors.values():
                 editor.interpretText()
@@ -244,7 +244,8 @@ class PanelWindow(QtWidgets.QMainWindow):
             self.close_ready = True
             self.close()
             return
-        # Bound callback work. ROS and Qt share this thread, including the heartbeat.
+        # 限制每次 ROS 回调工作量；Qt、ROS 回调和控制心跳共用当前线程。
+        # 不可把发送移到独立后台线程，否则界面冻结后旧目标仍会被持续续期。
         for _ in range(8):
             rclpy.spin_once(self.node, timeout_sec=0)
         self.node.tick()
@@ -253,6 +254,7 @@ class PanelWindow(QtWidgets.QMainWindow):
             self.next_refresh = time.monotonic() + .100
 
     def refresh(self):
+        # 显示可保留最后一次反馈，但过期时禁用控制并明确标记，不能伪装为实时。
         node = self.node
         board = node.board
         error = node.health_error()
@@ -344,8 +346,8 @@ class PanelWindow(QtWidgets.QMainWindow):
             self.closing = True
             self.node.stop('窗口关闭，已请求停止全部')
             self.refresh()
-            # Give the asynchronous Stop and any in-flight Enable a chance to settle.
-            # Backends also stop independently when publication ends.
+            # 给异步 Stop 和尚未结束的 Enable 留出处理时间后再关闭 ROS。
+            # 即使停止服务不可达，后端也会在心跳停止后独立超时停机。
             QtCore.QTimer.singleShot(350, self.finish_close)
 
     def finish_close(self):
@@ -362,7 +364,7 @@ def main(args=None):
     if not os.environ.get('DISPLAY') and not os.environ.get('WAYLAND_DISPLAY') and os.environ.get('QT_QPA_PLATFORM') not in ('offscreen', 'minimal'):
         print('控制面板需要图形桌面。无显示环境请使用 start_sim.sh --headless。', file=sys.stderr)
         return 1
-    # Qt owns shutdown: keep the ROS context alive while Stop is being delivered.
+    # 由 Qt 接管退出流程，发送停止请求期间保持 ROS 上下文可用。
     rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     app = QtWidgets.QApplication([sys.argv[0]])
     app.setStyle('Fusion')
@@ -376,8 +378,8 @@ def main(args=None):
         nonlocal shutdown_requested
         if not shutdown_requested:
             shutdown_requested = True
-            # A terminal and ros2 launch can both deliver SIGINT. Avoid a
-            # reentrant close from inside a ROS callback or Qt closeEvent.
+            # 终端和 ros2 launch 都可能发来 SIGINT；退出请求只排队一次，
+            # 避免在 ROS 回调或 Qt closeEvent 内重入关闭窗口。
             QtCore.QTimer.singleShot(0, window.close)
 
     signal.signal(signal.SIGINT, request_shutdown)

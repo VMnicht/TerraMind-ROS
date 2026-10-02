@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Source before ROS setup: native Qt/ROS programs must not load Snap libraries.
-# A Snap editor's integrated terminal can inherit its GTK/GIO/Qt search paths.
+# 在 ROS setup 前 source；系统 Qt/ROS 程序不能混用 Snap 内的运行库。
+# Snap 编辑器的集成终端可能继承 GTK/GIO/Qt 路径，这里仅过滤其中的 Snap 项。
 terramind_clean_snap_paths() {
   local name value entry changed
   local -a entries kept cleaned=()
@@ -8,7 +8,7 @@ terramind_clean_snap_paths() {
     QT_QPA_PLATFORM_PLUGIN_PATH LD_LIBRARY_PATH LD_PRELOAD; do
     value="${!name:-}"
     [[ -n "$value" ]] || continue
-    # The loader accepts both spaces and colons in LD_PRELOAD.
+    # 动态加载器允许 LD_PRELOAD 同时使用空格和冒号分隔。
     if [[ "$name" == LD_PRELOAD ]]; then
       value="${value// /:}"
     fi

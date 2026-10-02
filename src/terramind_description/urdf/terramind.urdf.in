@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<!-- Lightweight visual model. Geometry substitutions are made by sim.launch.py. -->
+<!-- 轻量显示模型；sim.launch.py 用 sim.yaml 中的轮径和轮距替换占位符。 -->
+<!-- 仅含 visual 和关节，未提供碰撞、惯性或物理引擎插件，不是动力学模型。 -->
 <robot name="terramind">
   <material name="body_green"><color rgba="0.12 0.45 0.22 1"/></material>
   <material name="tire"><color rgba="0.10 0.11 0.12 1"/></material>
@@ -12,6 +13,7 @@
     <visual><origin rpy="1.57079632679 0 0"/><geometry><cylinder radius="@WHEEL_RADIUS@" length="0.06"/></geometry><material name="tire"/></visual>
   </link>
   <joint name="left_wheel_joint" type="continuous">
+    <!-- 关节名须与仿真 JointState.name 一致，转角为 rad，轴沿车体 y 方向。 -->
     <parent link="base_link"/><child link="left_wheel"/><origin xyz="0 @HALF_TRACK@ 0"/><axis xyz="0 1 0"/>
   </joint>
   <link name="right_wheel">

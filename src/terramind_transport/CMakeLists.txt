@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# Linux 串口传输库；PTY 测试需要链接系统 util 库。
 project(terramind_transport)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

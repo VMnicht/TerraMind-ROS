@@ -23,7 +23,7 @@ bool complete_valid(const Bytes & b, size_t p)
 std::vector<Frame> FrameParser::feed(const uint8_t * data, size_t size)
 {
   std::vector<Frame> out;
-  // Parsing incrementally keeps memory bounded even for an arbitrarily large read.
+  // 逐字节推进解析，避免一次大块噪声输入导致缓存无限增长。
   for (size_t i = 0; i < size; ++i) {
     buffer_.push_back(data[i]);
     parse(out);
@@ -48,11 +48,12 @@ void FrameParser::parse(std::vector<Frame> & out)
       continue;
     }
     if (buffer_.size() < n + 12) {
-      // A TLV may itself contain header-like bytes, including a valid nested frame.
-      // Wait for the bounded candidate before deciding whether to resynchronize.
+      // TLV 内也可能包含帧头甚至完整帧的字节，不能提前跳到内部“帧头”。
+      // 已限制载荷至 256 字节，等待候选帧收齐后再决定是否重新同步。
       return;
     }
     if (!complete_valid(buffer_, 0)) {
+      // 校验失败仅滑动一个字节，保留后面可能存在的有效帧头。
       buffer_.erase(buffer_.begin());
       ++errors_;
       continue;

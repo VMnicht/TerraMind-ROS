@@ -5,6 +5,7 @@
 #include "rclcpp/rclcpp.hpp"
 namespace terramind::mcu
 {
+// 原样映射板卡反馈；stamp 为 PC 收帧时间，不推断真实传感器采样时刻。
 inline terramind_interfaces::msg::McuState to_ros(
   const protocol::State & s, uint16_t seq,
   const Session & session, bool simulated,
@@ -53,6 +54,7 @@ inline terramind_interfaces::msg::McuState to_ros(
   m.sprayer.feedback_valid = s.sprayer.valid;
   return m;
 }
+// device 填入实际端口路径，便于面板显示自动识别结果。
 inline diagnostic_msgs::msg::DiagnosticArray diagnostic(
   const rclcpp::Time & stamp,
   const std::string & name,

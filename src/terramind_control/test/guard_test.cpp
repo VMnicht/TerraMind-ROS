@@ -1,3 +1,4 @@
+// 保护层回归：源时间预算、连接代次、超时锁定和能力变化。
 #include "terramind_control/command_guard.hpp"
 #include "terramind_control/ros_helpers.hpp"
 #include <gtest/gtest.h>
@@ -18,7 +19,7 @@ TEST(Guard,TransportDelayConsumesValidityBudget) {
   c.linear = 0.1;
   ASSERT_TRUE(g.receive(c, 1, source, true, 15));
   EXPECT_TRUE(g.sample(before, true).enable);
-  // Already 100 ms old on arrival: it cannot drive for another 150 ms.
+  // 到达时已过去 100 ms，不能再获得完整的 150 ms 控制有效期。
   EXPECT_FALSE(g.sample(before + 0.060, true).enable);
 }
 TEST(Guard, RequiresDisabledHandshakeAndFreshConnection) {

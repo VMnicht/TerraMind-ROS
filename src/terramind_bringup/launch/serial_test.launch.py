@@ -1,3 +1,4 @@
+# 字节级联调入口：真实串口节点连接私有 PTY，不访问物理 USB 串口。
 from pathlib import Path
 import shutil
 import tempfile
@@ -23,7 +24,7 @@ def setup(context):
     emulator = str(Path(get_package_prefix('terramind_sim'))/'lib/terramind_sim/serial_board_emulator')
 
     def cleanup(event, context):
-        # Only remove the private directory allocated by this launch instance.
+        # 退出时只清理本次 launch 创建的临时目录。
         shutil.rmtree(directory, ignore_errors=True)
         return []
 

@@ -1,5 +1,7 @@
+# 控制管理与后端共用；指令和状态超时必须大于 0 且小于固件 250 ms 看门狗。
 /**:
   ros__parameters:
     command_timeout_s: 0.150
     state_timeout_s: 0.150
+    # 当前仿真使用实际时间；尚不支持 /clock 暂停或时间回跳。
     use_sim_time: false

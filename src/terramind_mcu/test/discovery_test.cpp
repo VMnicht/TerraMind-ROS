@@ -1,3 +1,4 @@
+// 被动发现回归：临时 PTY 模拟设备；验证歧义拒绝、别名去重和探测期间零发送。
 #include "terramind_mcu/port_discovery.hpp"
 #include "terramind_protocol/codec.hpp"
 #include "terramind_protocol/frame_parser.hpp"
@@ -151,7 +152,7 @@ TEST(Discovery, SelectsUniqueBoardWithoutTransmittingToAnyCandidate)
   EXPECT_EQ(corrupt.received, 0u);
   EXPECT_EQ(quiet.received, 0u);
   EXPECT_EQ(board.received, 0u);
-  // The winning descriptor remains locked, with no reopen between probe and use.
+  // 识别成功后原句柄持续持锁，从探测到使用之间不能重新打开设备。
   terramind::transport::SerialPort second;
   EXPECT_THROW(second.open(board.path), std::runtime_error);
 }

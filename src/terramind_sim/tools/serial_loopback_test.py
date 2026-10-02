@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent wire oracle. Creates a PTY emulator; never opens a hardware device."""
+"""独立字节级校验：Python struct/binascii 生成帧，只连接临时 PTY 模拟器。"""
 import argparse
 import binascii
 import os
@@ -102,7 +102,7 @@ def main():
             reader = Reader(fd)
             reader.wait(lambda s: s['mode'] == 0 and s['age'] == 65535)
             packet = control(65535, flags=1, linear=.2)
-            # Noise and every possible read boundary are handled by the actual C++ parser.
+            # 向真实 C++ 解析器输入噪声和各种分片边界，验证流式恢复能力。
             os.write(fd, b'noise')
             for byte in packet:
                 os.write(fd, bytes([byte]))

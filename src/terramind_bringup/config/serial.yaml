@@ -1,15 +1,16 @@
 mcu_serial_node:
   ros__parameters:
-    # auto: identify the unique board by its unsolicited v1 status frames.
-    # An explicit path bypasses discovery and keeps the manual connection mode.
+    # auto：监听主动上报的 v1 状态帧，只连接唯一匹配的控制板。
+    # 指定设备路径则跳过发现步骤，但仍执行未使能零指令握手。
     device: auto
     discovery_patterns:
       - /dev/serial/by-id/*
       - /dev/ttyUSB*
       - /dev/ttyACM*
-    # Shared listening window for all candidates; increase for slow board startup.
+    # 所有候选共享的监听窗口（秒）；启动较慢时可适当增大。
     discovery_listen_s: 0.6
     baud: 115200
+    # 发令周期允许 20～50 ms，默认 50 Hz；重连间隔单位秒。
     tx_period_ms: 20
     reconnect_interval_s: 1.0
     simulated: false

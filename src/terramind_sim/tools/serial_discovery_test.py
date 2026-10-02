@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automatic discovery integration test using ONLY private PTYs and a private ROS domain."""
+"""自动发现集成测试：限定私有 PTY 路径和独立 ROS 域，不扫描真实串口。"""
 import errno
 import os
 from pathlib import Path

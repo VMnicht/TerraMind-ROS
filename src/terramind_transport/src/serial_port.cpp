@@ -29,6 +29,7 @@ void SerialPort::open(const std::string & path, int baud)
   }
   try {
     if (flock(fd_, LOCK_EX | LOCK_NB) < 0) {
+      // 建议锁防止遵守同一约定的驱动/发现器同时消费一个串口的数据。
       throw error("serial already owned");
     }
     termios settings{};
@@ -36,6 +37,7 @@ void SerialPort::open(const std::string & path, int baud)
       throw error("tcgetattr");
     }
     cfmakeraw(&settings);
+    // 固定 115200、8N1、无硬件流控；原始模式禁止终端回显和字节转换。
     cfsetispeed(&settings, B115200);
     cfsetospeed(&settings, B115200);
     settings.c_cflag &= ~(PARENB | CSTOPB | CSIZE | CRTSCTS);
@@ -108,6 +110,7 @@ void SerialPort::write_all(const std::vector<uint8_t> & b, int timeout_ms)
     throw std::runtime_error("serial closed");
   }
   auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  // 部分写入、EINTR 重试共享同一截止时间，不能因重试无限延长发送。
   size_t offset = 0;
   while (offset < b.size()) {
     auto remain = std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a fresh bounded-duration command stream, explicitly enable, then stop."""
+"""显式使能并在限定时间内发送新鲜指令，退出时请求停止；也可控制实机。"""
 import argparse
 from collections import deque
 import math

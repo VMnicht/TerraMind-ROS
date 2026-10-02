@@ -1,3 +1,4 @@
+# 完整目标校验：覆盖边界值、能力限制及关闭装置归零，同时保留原草稿。
 from dataclasses import replace
 import math
 

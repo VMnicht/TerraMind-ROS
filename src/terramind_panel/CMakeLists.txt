@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# 通过 ament_cmake_python 安装 Python 模块和可执行入口，Qt 测试使用离屏平台。
 project(terramind_panel)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)

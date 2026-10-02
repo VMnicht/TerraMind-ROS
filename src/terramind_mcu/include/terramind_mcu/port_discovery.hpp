@@ -8,15 +8,14 @@
 
 namespace terramind::mcu
 {
-// glob patterns are visited in priority order; aliases of one device count once.
+// 按 glob 配置顺序枚举，同一设备的 by-id 和 ttyUSB 等别名只保留一次。
 std::vector<std::string> serial_candidates(const std::vector<std::string> & patterns);
 
 class StatusProbe
 {
 public:
-  // Feed only CRC-checked frames from FrameParser. Require progressing state
-  // sequence AND uptime, including normal integer wrap, rather than one packet.
-  // True means a newly progressing sample; duplicates never renew freshness.
+  // 只接收 FrameParser 已校验 CRC 的帧；需连续状态的序号和 uptime 都前进。
+  // 正常整数回绕允许通过；重复状态不能续期。返回 true 表示新推进的样本。
   bool observe(const protocol::Frame & frame);
   bool matched() const {return matched_;}
 
@@ -28,7 +27,7 @@ private:
 
 struct DiscoveryResult
 {
-  // The selected descriptor stays open/locked from identification to handshake.
+  // 识别后转移已打开且加锁的句柄，握手前不再次按路径打开设备。
   std::unique_ptr<transport::SerialPort> port;
   std::string device;
   std::vector<std::string> matches;
@@ -36,8 +35,8 @@ struct DiscoveryResult
   size_t candidate_count = 0;
 };
 
-// Passive discovery: this function never writes bytes to any candidate port.
-// No selection when zero or multiple ports speak the board protocol.
+// 被动识别：会打开并配置候选串口，但不向任何候选端口写入探测字节。
+// 零个或多个匹配均不选择，避免把控制指令发给导航板或另一块控制板。
 DiscoveryResult discover_control_board(
   const std::vector<std::string> & patterns, double listen_seconds,
   const std::function<bool()> & keep_running);

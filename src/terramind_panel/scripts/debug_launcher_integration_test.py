@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise launcher buttons with real ROS processes and simulated hardware only."""
+"""操作总面板按钮验证真实 ROS 子进程；只使用模拟硬件和不存在的实机路径。"""
 import argparse
 import os
 from pathlib import Path
@@ -68,8 +68,8 @@ def main():
             assert all(job.state == '已停止' for job in window.jobs)
             print('PASS launch, ready, panel, stop:', index, flush=True)
 
-        # A deliberately nonexistent explicit path must override device:auto.
-        # This proves the real launch does not scan or open any actual devices.
+        # 故意指定不存在的设备路径，验证它覆盖 device:auto。
+        # 该分支不得扫描或打开任何实际控制板。
         device = f'/dev/terramind-launcher-test-absent-{os.getpid()}'
         assert not Path(device).exists()
         window.mode.setCurrentIndex(2)

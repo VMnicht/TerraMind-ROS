@@ -8,6 +8,7 @@
 namespace ti = terramind_interfaces::msg;
 namespace tc = terramind::control;
 namespace tp = terramind::protocol;
+// 完整控制快照的唯一发布者。单线程 executor 串行处理订阅、服务和定时器。
 class ControlManager : public rclcpp::Node
 {
 public:
@@ -24,6 +25,7 @@ public:
       throw std::invalid_argument("MVP uses wall time; use_sim_time must be false");
     }
     auto q = rclcpp::QoS(1).reliable().durability_volatile();
+    // 只保留最新目标，禁止将历史运动指令排队重放或持久化给新订阅者。
     commands_ = create_publisher<ti::ControlCommand>("mcu/command", q);
     status_ = create_publisher<ti::ControlStatus>("control/status", q);
     velocity_ = create_subscription<geometry_msgs::msg::TwistStamped>(
@@ -62,6 +64,7 @@ public:
         velocity_time_ = tc::source_time_on_steady_clock(m.header.stamp, now());
         have_velocity_ = true;
       });
+    // 作业目标是一整组替换，不是对上次指令的增量修改。
     implements_ = create_subscription<ti::ImplementCommand>(
       "implements/command", q, [this](const ti::ImplementCommand & m) {
         if (!tc::fresh_stamp(m.header.stamp, now(), timeout_)) {
@@ -94,6 +97,7 @@ public:
           return;
         }
         if (connection_ != m.connection_id) {
+          // 拔插、后端重启或仿真复位都会产生新代次，旧目标不能继承。
           connection_ = m.connection_id;
           disarm("new board connection; enable required");
         }
@@ -120,6 +124,7 @@ public:
           return;
         }
         if (enabled_) {
+          // 重复使能是幂等操作，不能通过反复调用服务延长指令有效期。
           res->success = true;
           res->message = "already enabled";
           return;
@@ -151,6 +156,7 @@ private:
   }
   void disarm(const std::string & reason)
   {
+    // 同时丢弃底盘和作业缓存；再次使能必须取得新的输入。
     enabled_ = false;
     have_velocity_ = have_implements_ = false;
     linear_ = angular_ = 0;
@@ -159,6 +165,8 @@ private:
   }
   void publish()
   {
+    // 底盘心跳始终必需；作业装置开启时还独立检查作业指令有效期。
+    // 仅操作刀盘/喷洒时，也应持续发布零速度 cmd_vel。
     double t = tc::steady_seconds();
     if (enabled_ && !healthy()) {
       disarm("board status timeout or fault");
@@ -175,6 +183,7 @@ private:
       disarm("implement command timeout");
     }
     tp::Control c = tp::stopped();
+    // 缺省输出始终是停机快照，只有所有保护条件满足时才构造运行目标。
     if (enabled_) {
       c = implement_command_;
       c.enable = true;

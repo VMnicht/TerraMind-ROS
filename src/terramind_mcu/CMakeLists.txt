@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+# 共享会话/发现库与实机串口节点；发现测试使用线程和 PTY。
 project(terramind_mcu)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -1,9 +1,10 @@
-# Demonstration dimensions ONLY; these are not real machine measurements.
+# 仅为演示尺寸，不是真机测量值；运动模型和 URDF 共用这些参数。
 sim_interface_node:
   ros__parameters:
     wheel_diameter_m: 0.20
     wheel_separation_m: 0.45
-    # Current board: chassis, spreaders, mower, sprayer (no lift).
+    # 当前板卡 47：底盘、左右播撒、刀盘、喷洒；旧板卡 15；含升降全能力 63。
     capabilities: 47
+    # 加速度限制使目标归零后保留减速过程，并非瞬时停车。
     linear_acceleration_mps2: 0.7
     angular_acceleration_radps2: 4.0

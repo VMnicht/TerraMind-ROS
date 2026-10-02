@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Attach a panel to an already running simulation or hardware backend.
+# 单独打开控制面板，连接已经运行的仿真或实机后端；本脚本不启动后端。
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -eo pipefail
 

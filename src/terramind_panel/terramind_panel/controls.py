@@ -1,4 +1,4 @@
-"""Protocol ranges and immutable, complete operator selections (no ROS dependency)."""
+"""协议范围与不可变完整目标快照；不依赖 ROS，可单独测试。"""
 from dataclasses import dataclass, replace
 import math
 
@@ -20,6 +20,7 @@ class ActuatorField:
 
 
 ACTUATORS = (
+    # bit 为能力位的位号（不是掩码）；bit0 由底盘使用。
     ActuatorField('left', '左播撒', 'left_rpm', 'RPM', -500, 500, 10, 1),
     ActuatorField('right', '右播撒', 'right_rpm', 'RPM', -500, 500, 10, 2),
     ActuatorField('mower', '割草刀盘', 'mower_percent', '%', 0, 100, 1, 3),
@@ -30,6 +31,7 @@ ACTUATORS = (
 
 @dataclass(frozen=True)
 class Selection:
+    # 同一类型用于草稿和生效目标，冻结后不会被界面编辑原地改动。
     linear_mps: float = 0.0
     angular_radps: float = 0.0
     left_on: bool = False
@@ -59,6 +61,6 @@ class Selection:
                 raise ValueError(f'当前板卡不支持{field.title}')
 
     def normalized(self):
-        # Preserve the editable draft; unused blocks are transmitted with zero targets.
+        # 保留草稿中的编辑值，只在新生成的发送快照里把关闭装置的目标归零。
         changes = {f.value_field: 0.0 for f in ACTUATORS if not getattr(self, f.key + '_on')}
         return replace(self, **changes)

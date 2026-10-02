@@ -1,4 +1,4 @@
-"""ROS endpoint driven by the GUI event loop: a frozen UI cannot keep motion alive."""
+"""由 Qt 事件循环驱动的 ROS 端点：界面冻结时停止续发控制心跳。"""
 from collections import deque
 from datetime import datetime
 import time
@@ -12,6 +12,8 @@ from .controls import ACTUATORS, Selection
 
 
 class PanelNode(Node):
+    # phase 流程：idle → arming（先 Stop 再 Enable）→ waiting → running。
+    # 异常或用户停止均回 idle；generation 用于拒绝旧一轮异步服务的迟到结果。
     def __init__(self):
         super().__init__('terramind_panel')
         self.timeout = float(self.declare_parameter('state_timeout_s', .150).value)
@@ -54,6 +56,7 @@ class PanelNode(Node):
         self.events.append(f'{datetime.now():%H:%M:%S}  {text}')
 
     def _source_time(self, header):
+        # 扣除 ROS 传输延迟，再用单调时钟检查年龄，避免接收时给旧状态续期。
         stamp = header.stamp.sec + header.stamp.nanosec * 1e-9
         age = self.get_clock().now().nanoseconds * 1e-9 - stamp
         if stamp <= 0 or age < -.020 or age > self.timeout:
@@ -101,6 +104,7 @@ class PanelNode(Node):
         return ''
 
     def input_conflict(self):
+        # 这里只做面板级冲突检查，不是系统级的多控制源仲裁器。
         if self.count_publishers('cmd_vel') > 1 or self.count_publishers('implements/command') > 1:
             return '检测到其他控制输入，请先关闭其他面板或控制工具'
         if self.count_publishers('mcu/state') != 1 or self.count_publishers('control/status') != 1:
@@ -129,8 +133,8 @@ class PanelNode(Node):
         self.arming_stamp = self.get_clock().now().nanoseconds * 1e-9
         self.next_send = 0.0
         self._publish(Selection())
-        # A fresh Stop response acts as a barrier for prior queued Stop requests.
-        # Otherwise a delayed Stop after a service outage can overtake a new Enable.
+        # 先等待本次 Stop 应答，再请求 Enable，隔开之前排队的停止请求。
+        # 否则服务恢复后，迟到的 Stop 可能覆盖用户刚发出的新一轮使能。
         self.enable_stage = 'stop'
         try:
             self.enable_future = self.stop_client.call_async(Trigger.Request())
@@ -140,6 +144,7 @@ class PanelNode(Node):
         self.note('正在确认停止状态，然后请求使能')
 
     def apply(self, draft):
+        # 草稿经校验后整体替换生效快照；编辑控件本身不会即时改变输出。
         if self.phase != 'running':
             raise ValueError('请先开始发送')
         error = self.health_error()
@@ -190,9 +195,9 @@ class PanelNode(Node):
         if self.phase != 'idle' and gap > self.timeout:
             self.stop('界面响应超时，已停止；需要重新开始')
         if self.enable_future is not None and not self.enable_future.done() and now - self.arming_at > 2.0:
-            # A disappeared service must not leave the UI permanently unstartable.
-            # Cancellation is local only. Stop again; a late server-side Enable
-            # cannot receive fresh motion inputs from this now-idle panel.
+            # 服务消失时释放本地挂起请求，避免界面永久无法重新启动。
+            # 取消只影响本地 Future，不撤销服务端执行，因此还要再次请求停止。
+            # 即使旧 Enable 迟到，已回 idle 的面板也不会继续发送运动心跳。
             client = self.stop_client if self.enable_stage == 'stop' else self.enable_client
             client.remove_pending_request(self.enable_future)
             self.enable_future.cancel()
@@ -201,7 +206,7 @@ class PanelNode(Node):
         if self.enable_future is not None and self.enable_future.done():
             future, self.enable_future = self.enable_future, None
             if self.enable_generation != self.generation or self.phase != 'arming':
-                # An earlier enable may finish after Stop: settle it with another Stop.
+                # 停止后收到上一轮服务结果，再发 Stop 收尾，不能恢复旧目标。
                 self._request_stop()
             elif future.exception() is not None or not future.result().success:
                 message = str(future.exception()) if future.exception() else future.result().message
@@ -242,5 +247,5 @@ class PanelNode(Node):
             return
         if now >= self.next_send:
             self._publish(self.active if self.phase == 'running' else Selection())
-            # Keep the 20 ms phase across Qt timer jitter; never replay missed ticks.
+            # 小幅 Qt 抖动保持 20 ms 相位；长时间漏调度后不补发过时心跳。
             self.next_send = self.next_send + .020 if now - self.next_send < .020 else now + .020

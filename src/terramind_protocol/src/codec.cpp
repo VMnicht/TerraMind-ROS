@@ -23,6 +23,7 @@ void u32(Bytes & b, uint32_t v)
 }
 void f32(Bytes & b, float v)
 {
+  // 先复制 IEEE-754 位模式，再按小端序逐字节写入，避免结构体布局和别名问题。
   uint32_t bits;
   std::memcpy(&bits, &v, 4);
   u32(b, bits);
@@ -85,6 +86,7 @@ struct Reader
 using Blocks = std::map<uint8_t, Bytes>;
 Blocks blocks(const Frame & f, uint8_t expected, const std::array<size_t, 7> & lens)
 {
+  // 七个已知 TLV 必须各出现一次；未知 ID 按长度跳过，允许未来协议扩展。
   if (f.type != expected) {
     throw ProtocolError(Result::BAD_FRAME, "wrong frame type");
   }
@@ -129,6 +131,7 @@ Control stopped()
 }
 void validate(const Control & c, uint16_t capabilities)
 {
+  // 即使装置关闭也校验数值范围；整帧合法后才能更新目标或续期看门狗。
   range(c.linear, -0.35f, 0.35f);
   range(c.angular, -2, 2);
   range(c.left.value, -500, 500);
@@ -137,6 +140,7 @@ void validate(const Control & c, uint16_t capabilities)
   range(c.lift.value, 0, 1000);
   range(c.sprayer.value, 0, 100);
   if (c.enable && !c.stop) {
+    // 停机快照不要求设备具备相应能力；只有实际启用的装置参与能力检查。
     uint16_t required = (c.linear != 0 || c.angular != 0) ? 1 : 0;
     if (c.left.on) {
       required |= 2;
@@ -174,7 +178,7 @@ Bytes encode_frame(const Frame & f)
 }
 Bytes encode_control(const Control & c, uint16_t seq)
 {
-  // Capability policy belongs to the caller; this encoder can describe future devices.
+  // 编码器只验证格式和范围；具体板卡能力由控制管理/后端按状态反馈判断。
   validate(c, 0xffff);
   Bytes b;
   block(b, 1, Bytes{uint8_t(c.enable | (c.stop << 1))});
