@@ -1,10 +1,12 @@
 # TerraMind 割草机器人 PC
 
-ROS 2 Humble 工作区，包含 USART3 控制板通讯、控制管理、二维差速仿真、虚拟串口控制板和 Qt 控制面板。PC 按协议发送底盘线速度与角速度，真实下位机负责左右轮分配。所有启动入口默认停机，需要显式使能和持续更新的控制指令。
+ROS 2 Humble 工作区，包含 USART3 控制板通讯、导航板接收与坐标换算、控制管理、二维差速仿真、虚拟串口控制板和 Qt 控制面板。PC 按协议发送底盘线速度与角速度，真实下位机负责左右轮分配。所有启动入口默认停机，需要显式使能和持续更新的控制指令。
 
 ## 构建
 
 开发者请先阅读 [开发指南](src/doc/开发指南.md) 和 [节点与数据流](src/doc/节点与数据流.md)。前者包含新电脑克隆、依赖安装、源码入口、参数与扩展流程；后者说明三种后端和线程/进程边界。接口类型见 [ROS 接口约定](src/doc/ROS接口约定.md)，验证方法见 [联调与测试说明](src/doc/联调与测试说明.md)。
+
+导航板 v1 已接入：独立 460800 串口、80 字节流式解包、WGS84→固定 ENU、姿态换轴和安装杆臂。启动、原点/外参配置、时间语义及测试见 [导航接入与坐标换算](src/doc/导航接入与坐标换算.md)。导航首版发布独立定位话题，不发布动态 TF；实机安装参数仍需标定。
 
 开发环境：Ubuntu 22.04、ROS 2 Humble、C++17。Python 辅助工具使用系统 Python，不需要 pyserial。依赖由各包的 `package.xml` 声明；标准 ROS desktop 环境还需要 colcon、ament_cmake_gtest、ament_cmake_pytest、python3-yaml、python3-pyqt5、python3-pytest。若缺少面板依赖，可用 `sudo apt install python3-pyqt5 python3-pytest ros-humble-ament-cmake-pytest` 安装。
 

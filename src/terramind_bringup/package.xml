@@ -11,6 +11,7 @@
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>terramind_control</exec_depend>
   <exec_depend>terramind_mcu</exec_depend>
+  <exec_depend>terramind_navigation_driver</exec_depend>
   <exec_depend>terramind_sim</exec_depend>
   <exec_depend>terramind_description</exec_depend>
   <exec_depend>terramind_panel</exec_depend>

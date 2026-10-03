@@ -17,6 +17,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
  "msg/SprayerState.msg"
  "msg/McuState.msg"
  "msg/ControlStatus.msg"
+ "msg/NavigationFrame.msg"
+ "msg/NavigationStatus.msg"
  DEPENDENCIES std_msgs)
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()

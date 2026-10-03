@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>terramind_navigation_driver</name>
+  <version>0.1.0</version>
+  <description>Navigation v1 receive-only serial driver and WGS84 local coordinates.</description>
+  <maintainer email="maintainer@example.com">TerraMind maintainers</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+  <buildtool_export_depend>eigen3_cmake_module</buildtool_export_depend>
+  <depend>eigen</depend>
+  <depend>rclcpp</depend>
+  <depend>terramind_transport</depend>
+  <depend>terramind_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

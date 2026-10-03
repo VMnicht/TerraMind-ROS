@@ -51,3 +51,7 @@ ControlCommand 中 connection_id 必须匹配当前 McuState。控制帧自身 u
 McuState.header.stamp 是 PC 接收/仿真生成时间，不是传感器采样时间。uptime_ms 是板卡运行时间。link_ready 是 PC 的会话健康判断，不代表每个传感器独立有效。simulated 是启动后端的标识，不是网络认证机制。真实轮速暂缺少新鲜度标志，刀盘状态仅有设定油门。
 
 协议保留字段原样上报，PC 自身的超时、连接等原因由 ControlStatus 和 diagnostics 表达。当前 CAN 故障位和命令超时位会阻止运行；接收缓冲区历史溢出位保留并上报，不能单凭这一历史位永久禁止重新使能。
+
+## 导航接口
+
+导航节点独立使用 navigation/raw（NavigationFrame）、navigation/status（NavigationStatus）、navigation/pose（PoseStamped）、navigation/velocity（Vector3Stamped）和 diagnostics。Header 是 PC 接收时间；姿态输出点由 status.pose_child_frame 声明，速度始终属于 IMU 中心。使用定位需同时检查 usable 和 origin_ready，并按 session_id 分段。完整的坐标、时间、有效性和 QoS 约定见 [导航接入与坐标换算](导航接入与坐标换算.md)。

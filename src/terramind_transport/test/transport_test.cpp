@@ -33,3 +33,20 @@ TEST(Transport, InvalidDeviceAndBaud) {
   EXPECT_THROW(p.open("/not/a/serial/port"), std::runtime_error);
   EXPECT_THROW(p.open("/dev/null", 9600), std::invalid_argument);
 }
+TEST(Transport, NavigationBaudAndOwnership) {
+  int master, slave;
+  char path[256];
+  ASSERT_EQ(openpty(&master, &slave, path, nullptr, nullptr), 0);
+  terramind::transport::SerialPort p;
+  ASSERT_NO_THROW(p.open(path, 460800));
+  termios settings{};
+  ASSERT_EQ(tcgetattr(slave, &settings), 0);
+  EXPECT_EQ(cfgetispeed(&settings), B460800);
+  EXPECT_EQ(cfgetospeed(&settings), B460800);
+  terramind::transport::SerialPort control;
+  EXPECT_THROW(control.open(path, 115200), std::runtime_error);
+  const uint8_t bytes[]{0xaa, 0x55, 0, 0xff};
+  ASSERT_EQ(write(master, bytes, sizeof(bytes)), 4);
+  EXPECT_EQ(p.read_some(100), (std::vector<uint8_t>{0xaa, 0x55, 0, 0xff}));
+  p.close(); close(master); close(slave);
+}

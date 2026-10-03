@@ -20,8 +20,11 @@ std::runtime_error error(const char * operation)
 void SerialPort::open(const std::string & path, int baud)
 {
   close();
-  if (baud != 115200) {
-    throw std::invalid_argument("v1 serial baud must be 115200");
+  speed_t speed;
+  switch (baud) {
+    case 115200: speed = B115200; break;
+    case 460800: speed = B460800; break;
+    default: throw std::invalid_argument("supported serial baud: 115200 or 460800");
   }
   fd_ = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
   if (fd_ < 0) {
@@ -37,9 +40,10 @@ void SerialPort::open(const std::string & path, int baud)
       throw error("tcgetattr");
     }
     cfmakeraw(&settings);
-    // 固定 115200、8N1、无硬件流控；原始模式禁止终端回显和字节转换。
-    cfsetispeed(&settings, B115200);
-    cfsetospeed(&settings, B115200);
+    // 两种板卡共用 8N1、无硬件流控；原始模式禁止回显和字节转换。
+    if (cfsetispeed(&settings, speed) < 0 || cfsetospeed(&settings, speed) < 0) {
+      throw error("set serial speed");
+    }
     settings.c_cflag &= ~(PARENB | CSTOPB | CSIZE | CRTSCTS);
     settings.c_cflag |= CS8 | CLOCAL | CREAD;
     settings.c_cc[VMIN] = 0;

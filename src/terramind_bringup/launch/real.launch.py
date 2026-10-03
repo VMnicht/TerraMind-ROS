@@ -15,14 +15,20 @@ def generate_launch_description():
     serial_parameters = yaml.safe_load(serial.read_text())['mcu_serial_node']['ros__parameters']
     # 先读取 YAML 字典再覆盖 device，确保命令行手动端口优先于 device:auto。
     default_device = serial_parameters['device']
+    navigation = yaml.safe_load((share/'config/navigation.yaml').read_text())['navigation_serial_node']['ros__parameters']
     common = str(share/'config/control.yaml')
     return LaunchDescription([
         DeclareLaunchArgument('device', default_value=default_device,
                               description='auto to discover the control board, or an explicit serial path'),
         DeclareLaunchArgument('panel', default_value='false'),
+        DeclareLaunchArgument('navigation', default_value='false'),
+        DeclareLaunchArgument('navigation_device', default_value=navigation['device']),
         Node(package='terramind_control', executable='control_manager_node', parameters=[common], output='screen'),
         Node(package='terramind_mcu', executable='mcu_serial_node', output='screen',
              parameters=[common, {**serial_parameters, 'device': LaunchConfiguration('device'), 'simulated': False}]),
+        Node(package='terramind_navigation_driver', executable='navigation_serial_node', output='screen',
+             parameters=[{**navigation, 'device': LaunchConfiguration('navigation_device')}],
+             condition=IfCondition(LaunchConfiguration('navigation'))),
         Node(package='terramind_panel', executable='control_panel', parameters=[common],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),
     ])

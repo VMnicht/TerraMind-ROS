@@ -1,0 +1,26 @@
+navigation_serial_node:
+  ros__parameters:
+    # 建议使用 /dev/serial/by-id/... 或稳定 udev 别名；导航首版不自动扫描。
+    device: /dev/terramind-navigation
+    baud: 460800
+    reconnect_interval_s: 1.0
+    assembly_timeout_s: 0.1
+    connection_timeout_s: 3.0
+    navigation_timeout_s: 0.1
+    max_age_ms: 500
+    allow_simulated: false
+    map_frame: navigation_map
+    imu_frame: navigation_imu
+    base_frame: base_link
+    # first_valid：首个合格测量建立原点，当前进程内重连保留原点。
+    # 正式作业改为 fixed 并填写保存的 WGS84 经纬度/椭球高。
+    origin_mode: first_valid
+    origin_require_rtk_fixed: true
+    origin_latitude_deg: 0.0
+    origin_longitude_deg: 0.0
+    origin_height_m: 0.0
+    # 未标定时 pose 输出 IMU 中心/FLU，不能当作车辆控制点位姿。
+    extrinsics_calibrated: false
+    imu_translation_in_base_m: [0.0, 0.0, 0.0]
+    # 将“导航机体系经 FRD->FLU 后”的向量旋转到 base_link；不是原始传感器轴。
+    imu_rotation_in_base_wxyz: [1.0, 0.0, 0.0, 0.0]
