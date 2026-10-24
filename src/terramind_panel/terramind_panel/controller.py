@@ -7,8 +7,9 @@ from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
 from std_srvs.srv import SetBool, Trigger
 from diagnostic_msgs.msg import DiagnosticArray
-from terramind_interfaces.msg import ImplementCommand, McuState, ControlStatus, ControlCommand
-from .controls import ACTUATORS, Selection
+from terramind_interfaces.msg import ImplementCommand, McuState, ControlStatus, ControlCommand, NavigationStatus
+from .controls import ACTUATORS, Selection, DEFAULT_LIFT_MAX_MM, validate_lift_limit
+from .coverage_runtime import CoverageRuntime
 
 
 class PanelNode(Node):
@@ -18,6 +19,8 @@ class PanelNode(Node):
         super().__init__('terramind_panel')
         self.timeout = float(self.declare_parameter('state_timeout_s', .150).value)
         self.backend_label = str(self.declare_parameter('backend_label', '').value)
+        self.lift_max_mm = validate_lift_limit(float(
+            self.declare_parameter('lift_max_mm', DEFAULT_LIFT_MAX_MM).value))
         if not .05 <= self.timeout < .250:
             raise ValueError('state_timeout_s must be in [0.05, 0.250)')
         if self.get_parameter('use_sim_time').value:
@@ -29,6 +32,9 @@ class PanelNode(Node):
         self.create_subscription(McuState, 'mcu/state', self._on_board, 1)
         self.create_subscription(ControlStatus, 'control/status', self._on_control, 1)
         self.create_subscription(ControlCommand, 'mcu/command', self._on_command, 1)
+        self.navigation = None
+        self.navigation_time = -1.0
+        self.create_subscription(NavigationStatus, 'navigation/status', self._on_navigation, 1)
         self.create_subscription(DiagnosticArray, 'diagnostics', self._on_diagnostic, 10)
         self.board = self.control = self.command = None
         self.board_time = self.control_time = -1.0
@@ -50,6 +56,7 @@ class PanelNode(Node):
         self.reason = '等待连接；启动后保持停机'
         self.events = deque(maxlen=80)
         self.note(self.reason)
+        self.coverage = CoverageRuntime(self)
 
     def note(self, text):
         self.reason = text
@@ -80,6 +87,11 @@ class PanelNode(Node):
     def _on_command(self, message):
         if self._source_time(message.header) is not None:
             self.command = message
+
+    def _on_navigation(self, message):
+        received = self._source_time(message.header)
+        if received is not None and received > self.navigation_time:
+            self.navigation, self.navigation_time = message, received
 
     def _on_diagnostic(self, message):
         for status in message.status:
@@ -112,6 +124,8 @@ class PanelNode(Node):
         return ''
 
     def start(self, draft):
+        if self.coverage.active:
+            raise ValueError('区域作业中，不能启动手动控制')
         error = self.health_error() or self.input_conflict()
         if error:
             raise ValueError(error)
@@ -123,7 +137,7 @@ class PanelNode(Node):
             raise ValueError('使能或停止服务尚未就绪')
         if not self.velocity.get_subscription_count() or not self.implements.get_subscription_count():
             raise ValueError('控制输入尚未连接')
-        draft.validate(self.board.capabilities)
+        draft.validate_device(self.board.capabilities, self.lift_max_mm)
         self.active = draft.normalized()
         self.connection = self.board.connection_id
         self.generation += 1
@@ -144,6 +158,8 @@ class PanelNode(Node):
         self.note('正在确认停止状态，然后请求使能')
 
     def apply(self, draft):
+        if self.coverage.active:
+            raise ValueError('区域作业中，不能应用手动目标')
         # 草稿经校验后整体替换生效快照；编辑控件本身不会即时改变输出。
         if self.phase != 'running':
             raise ValueError('请先开始发送')
@@ -151,7 +167,7 @@ class PanelNode(Node):
         if error:
             self.stop(error)
             raise ValueError(error)
-        draft.validate(self.board.capabilities)
+        draft.validate_device(self.board.capabilities, self.lift_max_mm)
         self.active = draft.normalized()
         self.note('已应用全部目标，持续发送中')
 
@@ -165,6 +181,7 @@ class PanelNode(Node):
         self.stop_futures = [future for future in self.stop_futures if not future.done()][-8:]
 
     def stop(self, reason='已请求停止全部；再次运行需要重新开始', disable=False):
+        self.coverage.cancel(reason)
         self.generation += 1
         self.phase = 'idle'
         self.active = Selection()
@@ -240,8 +257,11 @@ class PanelNode(Node):
         elif not self.control.enabled:
             self.stop('控制管理已撤销使能：' + self.control.reason)
             return
+        self.coverage.tick()
+        if self.phase == 'idle':
+            return
         try:
-            self.active.validate(self.board.capabilities)
+            self.active.validate_device(self.board.capabilities, self.lift_max_mm)
         except ValueError as error:
             self.stop(str(error))
             return

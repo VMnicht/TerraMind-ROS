@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""定位杆臂辨识：原地正反各一圈，所有机具关闭。先启动后端与导航并关闭面板。"""
+import argparse
+import copy
+import json
+import math
+from pathlib import Path
+import signal
+import time
+import yaml
+import rclpy
+from rcl_interfaces.srv import GetParameters
+from rclpy.parameter import parameter_value_to_python
+from rclpy.signals import SignalHandlerOptions
+from terramind_panel.controller import PanelNode
+from terramind_panel.lever_arm_runtime import LeverArmRuntime
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config',required=True,type=Path,help='与运行中的导航驱动相同的 navigation.yaml')
+    parser.add_argument('--output',required=True,type=Path,help='新建的导航配置文件；不会覆盖已有文件')
+    parser.add_argument('--speed',type=float,default=.4,help='自转角速度，0.15～0.6 rad/s')
+    args,ros_args = parser.parse_known_args()
+    if not math.isfinite(args.speed) or not .15 <= args.speed <= .6:
+        parser.error('--speed 必须在 0.15～0.6 rad/s')
+    config = yaml.safe_load(args.config.read_text())
+    parameters = config['navigation_serial_node']['ros__parameters']
+    if args.output.exists():
+        parser.error('输出文件已存在，请指定新文件')
+    args.output.parent.resolve(strict=True)
+    # 保留 ROS 上下文直至零指令和 Stop 发出，Ctrl+C 不先销毁通信。
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt('用户中止辨识')
+    previous_term = signal.signal(signal.SIGTERM,interrupted)
+    rclpy.init(args=ros_args,signal_handler_options=SignalHandlerOptions.NO)
+    node = PanelNode()
+    started = False
+    try:
+        runtime = LeverArmRuntime(node,parameters['imu_rotation_in_base_wxyz'],args.speed)
+        # 参数只在导航驱动启动时读取；核对运行配置，避免用错安装角辨识。
+        client = node.create_client(GetParameters,'navigation_serial_node/get_parameters')
+        if not client.wait_for_service(timeout_sec=8):
+            raise ValueError('导航参数服务不可用')
+        names = ['imu_rotation_in_base_wxyz','imu_translation_in_base_m','extrinsics_calibrated']
+        request = GetParameters.Request()
+        request.names = names
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(node,future,timeout_sec=3)
+        if not future.done() or future.exception():
+            raise ValueError('读取导航参数失败')
+        for name,value in zip(names,future.result().values):
+            if parameter_value_to_python(value) != parameters[name]:
+                raise ValueError('运行中的导航配置与 --config 不一致：'+name)
+        end = time.monotonic()+10
+        while time.monotonic()<end:
+            rclpy.spin_once(node,timeout_sec=.005);node.tick()
+            try:
+                runtime.start()
+                started = True
+                break
+            except ValueError as error:
+                last_error = str(error)
+        else:
+            raise ValueError('未能开始辨识：'+last_error)
+        print('开始逆时针/顺时针各一圈；Ctrl+C 停止。',flush=True)
+        previous = None
+        while rclpy.ok() and runtime.running:
+            rclpy.spin_once(node,timeout_sec=.005)
+            runtime.tick();node.tick()
+            if runtime.spin.phase != previous:
+                previous = runtime.spin.phase
+                print('辨识阶段：'+previous,flush=True)
+        if runtime.error or runtime.result is None:
+            raise ValueError(runtime.error or '辨识未完成')
+        result = runtime.result
+        output = copy.deepcopy(config)
+        p = output['navigation_serial_node']['ros__parameters']
+        p['imu_translation_in_base_m'] = [result.x,result.y,float(parameters['imu_translation_in_base_m'][2])]
+        p['extrinsics_calibrated'] = False
+        report = {'x_m':result.x,'y_m':result.y,'max_rms_m':result.rms,
+                  'direction_difference_m':result.direction_difference,'samples':result.samples}
+        # x 模式保证不覆盖用户配置；z 和安装旋转完全保留。
+        with args.output.open('x',encoding='utf-8') as handle:
+            handle.write('# 平面自转辨识结果；确认 z 和安装旋转后，将 extrinsics_calibrated 改为 true。\n')
+            handle.write('# '+json.dumps(report,ensure_ascii=False)+'\n')
+            yaml.safe_dump(output,handle,allow_unicode=True,sort_keys=False)
+        print(json.dumps(report,ensure_ascii=False,indent=2))
+        print(f'已保存 {args.output}。确认高度与安装姿态后启用外参并重启导航。')
+        return 0
+    except (ValueError,KeyboardInterrupt) as error:
+        print('已停止：'+str(error),flush=True)
+        return 1
+    finally:
+        if rclpy.ok() and started:
+            node.stop('辨识程序退出')
+            end = time.monotonic()+.4
+            while time.monotonic()<end:
+                rclpy.spin_once(node,timeout_sec=.01)
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+        signal.signal(signal.SIGTERM,previous_term)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

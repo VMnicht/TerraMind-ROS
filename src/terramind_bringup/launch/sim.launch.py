@@ -32,7 +32,7 @@ def generate_launch_description():
         Node(package='terramind_sim', executable='sim_interface_node',
              # 先合并字典再生成参数文件，保证命令行能力位覆盖 YAML 节点级配置。
              parameters=[common, {**geometry, 'capabilities': ParameterValue(LaunchConfiguration('capabilities'), value_type=int)}], output='screen'),
-        Node(package='terramind_panel', executable='control_panel', parameters=[common, {'backend_label': '二维运动仿真'}],
+        Node(package='terramind_panel', executable='control_panel', parameters=[common, {'backend_label': '二维运动仿真', 'coverage_pose_source': 'simulation'}],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              parameters=[{'robot_description': model, 'use_sim_time': False}],

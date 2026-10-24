@@ -36,15 +36,18 @@ def main():
     from ament_index_python.packages import get_package_prefix
     from terramind_interfaces.msg import NavigationFrame, NavigationStatus
     from geometry_msgs.msg import PoseStamped, Vector3Stamped
+    from nav_msgs.msg import Path as RosPath
 
     rclpy.init()
     node = rclpy.create_node('navigation_integration_test')
     status, raw, poses, velocities = [None], [], [], []
+    paths = []
     subscriptions = [
         node.create_subscription(NavigationStatus, 'navigation/status', lambda m: status.__setitem__(0, m), 10),
         node.create_subscription(NavigationFrame, 'navigation/raw', raw.append, qos_profile_sensor_data),
         node.create_subscription(PoseStamped, 'navigation/pose', poses.append, qos_profile_sensor_data),
         node.create_subscription(Vector3Stamped, 'navigation/velocity', velocities.append, qos_profile_sensor_data),
+        node.create_subscription(RosPath, 'navigation/path', paths.append, 1),
     ]
     sequence, stamp = [1], [1000.]
     master = slave = None
@@ -102,6 +105,8 @@ def main():
             assert abs(velocities[-1].vector.x - 1) < 1e-8
             assert raw[-1].header.stamp.sec > 1_000_000_000  # 不是协议的 1000 s
             origin = (status[0].origin_latitude_rad, status[0].origin_longitude_rad)
+            wait(lambda: paths and len(paths[-1].poses) > 1, writer=send)
+            assert paths[-1].header.frame_id == poses[-1].header.frame_id
 
             # 任意分片、噪声、坏 CRC、未知版本、粘包恢复。
             corrupt = encode(100, stamp[0]); corrupt[30] ^= 1
@@ -132,11 +137,13 @@ def main():
             for _ in range(15):
                 send(status=0x94); drain(.01)
             assert len(poses) == count and status[0].online
+            path_count = len(paths[-1].poses)
             for bad in ({'age': 65535}, {'age': 501}, {'quaternion': [0., 0., 0., 0.]},
                         {'latitude': float('nan')}, {'status': 0x9F}):
                 for _ in range(6):
                     send(**bad); drain(.01)
                 assert not status[0].usable and len(poses) == count
+                assert len(paths[-1].poses) == path_count
             wait(lambda: status[0].usable, writer=send)
 
             # 明确建立回绕前基准，随后 FFFFFFFF -> 0 不应触发重启。
@@ -147,6 +154,7 @@ def main():
             assert raw[-1].session_id == session_id
             stamp[0] = 1; send(); drain(.08)
             assert raw[-1].session_id != session_id
+            assert len(paths[-1].poses) <= 1
 
             # 100/200 Hz 验证处理能力，不宣称为物理 UART 吞吐测量。
             for hz in (100, 200):

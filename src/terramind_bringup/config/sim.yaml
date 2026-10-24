@@ -3,7 +3,7 @@ sim_interface_node:
   ros__parameters:
     wheel_diameter_m: 0.20
     wheel_separation_m: 0.45
-    # 当前板卡 47：底盘、左右播撒、刀盘、喷洒；旧板卡 15；含升降全能力 63。
+    # 兼容场景 47：底盘、左右播撒、刀盘、喷洒；旧板卡 15；含升降全能力 63。
     capabilities: 47
     # 加速度限制使目标归零后保留减速过程，并非瞬时停车。
     linear_acceleration_mps2: 0.7

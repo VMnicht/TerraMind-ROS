@@ -6,6 +6,8 @@ import rclpy
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from .controls import ACTUATORS, Selection
+from .navigation_status import describe_navigation
+from .coverage_widget import CoverageWidget
 
 
 STYLE = """
@@ -81,6 +83,7 @@ class PanelWindow(QtWidgets.QMainWindow):
         header = QtWidgets.QHBoxLayout()
         titles = QtWidgets.QVBoxLayout()
         title = label('TerraMind  /  控制测试')
+        title.setWordWrap(False)
         title.setObjectName('heading')
         titles.addWidget(title)
         titles.addWidget(label('底盘与作业装置 · 仿真 / USB 串口实机', True))
@@ -99,7 +102,11 @@ class PanelWindow(QtWidgets.QMainWindow):
 
         columns = QtWidgets.QHBoxLayout()
         columns.setSpacing(16)
-        outer.addLayout(columns, 1)
+        self.mode_tabs = QtWidgets.QTabWidget()
+        manual_page = QtWidgets.QWidget()
+        manual_page.setLayout(columns)
+        self.mode_tabs.addTab(manual_page, '手动调试')
+        outer.addWidget(self.mode_tabs, 1)
         # 小屏幕可滚动作业字段；停止按钮放在滚动区之外，始终可见。
         controls_scroll = QtWidgets.QScrollArea()
         controls_scroll.setWidgetResizable(True)
@@ -132,6 +139,9 @@ class PanelWindow(QtWidgets.QMainWindow):
         for row, field in enumerate(ACTUATORS, 1):
             checkbox = QtWidgets.QCheckBox(field.title)
             editor = spin(field.minimum, field.maximum, field.step, field.unit)
+            if field.key == 'lift':
+                editor.setMaximum(node.lift_max_mm)
+                editor.setToolTip('相对初始位置的缩短量；关闭或停止后逐步回零，不保持当前位置。')
             status = label('等待状态', True)
             self.checks[field.key] = checkbox
             self.editors[field.value_field] = editor
@@ -139,7 +149,7 @@ class PanelWindow(QtWidgets.QMainWindow):
             grid.addWidget(checkbox, row, 0)
             grid.addWidget(editor, row, 1)
             grid.addWidget(status, row, 2)
-        grid.addWidget(label('未勾选的装置发送关闭、目标归零。灰色字段表示当前板卡不支持。', True), 6, 0, 1, 3)
+        grid.addWidget(label('未勾选的装置发送关闭、目标归零。升降为相对初始位置缩短量，关闭或停止后逐步回零。灰色字段表示当前板卡不支持。', True), 6, 0, 1, 3)
         left.addWidget(implements)
 
         self.draft_status = label('目标均为零')
@@ -160,16 +170,16 @@ class PanelWindow(QtWidgets.QMainWindow):
         self.summary_label = label('等待状态…')
         self.summary_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         f.addWidget(self.summary_label)
-        self.table = QtWidgets.QTableWidget(7, 3)
+        self.table = QtWidgets.QTableWidget(8, 3)
         self.table.setHorizontalHeaderLabels(['字段', '设定 / 状态', '实际 / 附加反馈'])
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.table.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.table.setMinimumHeight(270)
-        self.table.setMaximumHeight(290)
-        for row, name in enumerate(('底盘 v / ω', '左右驱动轮', '左播撒', '右播撒', '割草刀盘', '刀盘升降', '喷洒装置')):
+        self.table.setMinimumHeight(302)
+        self.table.setMaximumHeight(322)
+        for row, name in enumerate(('底盘线速度', '底盘角速度', '左右输出轴 RPM', '左播撒', '右播撒', '割草刀盘', '升降缩短量', '喷洒装置')):
             for col, value in enumerate((name, '—', '—')):
                 self.table.setItem(row, col, QtWidgets.QTableWidgetItem(value))
             self.table.setRowHeight(row, 32)
@@ -185,6 +195,9 @@ class PanelWindow(QtWidgets.QMainWindow):
         self.event_view.setReadOnly(True)
         self.tabs.addTab(self.command_view, 'PC 完整指令')
         self.tabs.addTab(self.event_view, '操作记录')
+        self.navigation_view = QtWidgets.QPlainTextEdit()
+        self.navigation_view.setReadOnly(True)
+        self.tabs.addTab(self.navigation_view, '导航状态')
         right.addWidget(self.tabs, 1)
         right.addWidget(label('这里显示控制管理节点的输出。串口组帧由驱动完成；板卡最近命令序号与结果见上方。', True))
 
@@ -205,6 +218,9 @@ class PanelWindow(QtWidgets.QMainWindow):
         outer.addLayout(bottom)
 
         self.start_button.clicked.connect(lambda: self.invoke(self.node.start))
+        self.coverage_page = CoverageWidget(node, self.draft)
+        self.mode_tabs.addTab(self.coverage_page, '区域作业')
+        self.mode_tabs.currentChanged.connect(lambda index: self.show_manual_actions(index == 0))
         self.apply_button.clicked.connect(lambda: self.invoke(self.node.apply))
         self.reset_button.clicked.connect(self.reset_draft)
         self.disable_button.clicked.connect(lambda: self.node.stop('已请求撤销使能', disable=True))
@@ -224,6 +240,10 @@ class PanelWindow(QtWidgets.QMainWindow):
         values = {key: editor.value() for key, editor in self.editors.items()}
         values.update({key + '_on': checkbox.isChecked() for key, checkbox in self.checks.items()})
         return Selection(**values)
+
+    def show_manual_actions(self, visible):
+        for button in (self.start_button,self.apply_button,self.reset_button):
+            button.setVisible(visible)
 
     def reset_draft(self):
         for editor in self.editors.values():
@@ -280,6 +300,10 @@ class PanelWindow(QtWidgets.QMainWindow):
             self.support[field.key].setText('可控制' if supported else ('不支持' if live else '等待状态'))
         self.start_button.setEnabled(not self.closing and node.phase == 'idle' and not error and node.enable_future is None)
         self.apply_button.setEnabled(not self.closing and node.phase == 'running' and not error)
+        if node.coverage.active:
+            self.start_button.setEnabled(False)
+            self.apply_button.setEnabled(False)
+        self.coverage_page.refresh()
         self.reset_button.setEnabled(not self.closing)
         draft = self.draft(commit=False).normalized()
         if node.phase == 'running':
@@ -294,6 +318,12 @@ class PanelWindow(QtWidgets.QMainWindow):
             if node.phase == 'running' else
             ('仿真连接就绪 · 可设置目标并开始发送' if simulated else '实机连接就绪 · 开始发送后会驱动实际装置')))
         self.reason_label.setText(node.reason)
+        navigation_text = describe_navigation(
+            node.navigation, time.monotonic() - node.navigation_time <= node.timeout)
+        if self.navigation_view.toPlainText() != navigation_text:
+            scroll = self.navigation_view.verticalScrollBar().value()
+            self.navigation_view.setPlainText(navigation_text)
+            self.navigation_view.verticalScrollBar().setValue(scroll)
         if board:
             modes = {0: '尚未接管', 1: '运行', 2: '停机 / 禁用'}
             results = {0: '接纳', 1: '帧错误', 2: '参数错误', 3: '能力不支持', 4: '保留值'}
@@ -304,7 +334,8 @@ class PanelWindow(QtWidgets.QMainWindow):
             c = board.chassis
             on = lambda value: '开' if value else '关'
             values = [
-                (f'{c.linear_mps:.3f} m/s', f'{c.angular_radps:.3f} rad/s'),
+                (f'{c.linear_mps:.3f} m/s', '应用目标，非实测'),
+                (f'{c.angular_radps:.3f} rad/s', '应用目标，非实测'),
                 (f'{c.left_target_rpm:.1f} / {c.right_target_rpm:.1f} RPM', f'{c.left_actual_rpm:.1f} / {c.right_actual_rpm:.1f} RPM'),
                 (f'{on(board.left_spreader.on)} · {board.left_spreader.target_rpm:.1f} RPM', f'{board.left_spreader.actual_rpm:.1f} RPM / 舵机 {board.left_spreader.servo_set_angle_deg:.1f}°'),
                 (f'{on(board.right_spreader.on)} · {board.right_spreader.target_rpm:.1f} RPM', f'{board.right_spreader.actual_rpm:.1f} RPM / 舵机 {board.right_spreader.servo_set_angle_deg:.1f}°'),

@@ -13,6 +13,7 @@
   <depend>terramind_transport</depend>
   <depend>terramind_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>diagnostic_msgs</depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ament_index_python</exec_depend>

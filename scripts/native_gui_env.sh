@@ -38,3 +38,10 @@ terramind_clean_snap_paths() {
 }
 terramind_clean_snap_paths
 unset -f terramind_clean_snap_paths
+
+# 本机 WSL 的 Fast DDS 进程发现不稳定；已安装 Cyclone DDS 时用于本工作区入口。
+# 保留用户显式选择，不修改系统或其他终端的默认中间件。
+if [[ -z "${RMW_IMPLEMENTATION:-}" ]] && grep -qi microsoft /proc/sys/kernel/osrelease \
+  && [[ -f /opt/ros/humble/lib/librmw_cyclonedds_cpp.so ]]; then
+  export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+fi

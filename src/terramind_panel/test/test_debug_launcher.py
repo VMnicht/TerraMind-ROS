@@ -19,6 +19,14 @@ def app():
     yield application
 
 
+@pytest.fixture
+def ros_available(monkeypatch):
+    # 这些单元测试只验证排队/互斥，不执行 ROS。环境检查与进程联调分开。
+    exists = Path.exists
+    monkeypatch.setattr(Path, 'exists', lambda path:
+                        True if str(path) == '/opt/ros/humble/setup.bash' else exists(path))
+
+
 def wait(app, predicate, timeout=5):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -107,7 +115,7 @@ def test_shell_arguments_cannot_execute_user_input(tmp_path):
     assert not marker.exists()
 
 
-def test_window_conflicts_and_backend_options(app, tmp_path, monkeypatch):
+def test_window_conflicts_and_backend_options(app, tmp_path, monkeypatch, ros_available):
     window = DebugWindow(tmp_path)
     launched = []
     monkeypatch.setattr(window, 'artifacts_ready', lambda: True)
@@ -128,7 +136,20 @@ def test_window_conflicts_and_backend_options(app, tmp_path, monkeypatch):
     window.close()
 
 
-def test_auto_build_only_launches_after_success(app, tmp_path, monkeypatch):
+def test_standalone_panel_uses_workspace_limits(app, tmp_path, monkeypatch):
+    workspace = tmp_path / 'Linux workspace'
+    window = DebugWindow(workspace)
+    launched = []
+    monkeypatch.setattr(window, 'request', launched.append)
+    window.launch_panel()
+    command = launched[-1].command
+    assert command[command.index('--params-file') + 1] == str(
+        workspace / 'src/terramind_bringup/config/control.yaml')
+    assert launched[-1].panel
+    window.close()
+
+
+def test_auto_build_only_launches_after_success(app, tmp_path, monkeypatch, ros_available):
     window = DebugWindow(tmp_path)
     launched = []
     monkeypatch.setattr(window, 'spawn', launched.append)
@@ -143,6 +164,52 @@ def test_auto_build_only_launches_after_success(app, tmp_path, monkeypatch):
     Done.state = '已完成'
     window.job_finished(Done())
     assert launched[-1].key == 'backend'
+    window.close()
+
+
+def test_navigation_launch_options(app, tmp_path, monkeypatch):
+    config = tmp_path / 'navigation parameters.yaml'
+    config.write_text('navigation_serial_node: {}\n')
+    window = DebugWindow(tmp_path)
+    launched = []
+    monkeypatch.setattr(window, 'request', launched.append)
+    window.mode.setCurrentIndex(2)
+    window.navigation.setChecked(True)
+    window.navigation_config.setText(str(config))
+    window.navigation_device.setText('/dev/navigation-test')
+    assert window.rviz.isEnabled()
+    window.launch_backend()
+    command = launched[-1].command
+    assert 'navigation:=true' in command
+    assert 'navigation_config:=' + str(config) in command
+    assert 'navigation_device:=/dev/navigation-test' in command
+    assert 'navigation_rviz:=true' in command
+    window.navigation_device.setText('auto')
+    window.launch_backend()
+    assert len(launched) == 1
+    window.close()
+
+
+def test_navigation_editor_preserves_file_on_invalid_yaml(app, tmp_path, monkeypatch):
+    config = tmp_path / 'navigation.yaml'
+    original = 'navigation_serial_node:\n  ros__parameters:\n    origin_height_m: 20.0\n'
+    config.write_text(original)
+    window = DebugWindow(tmp_path)
+    window.navigation_config.setText(str(config))
+    contents = ['[invalid', original.replace('20.0', '21.0')]
+    errors = []
+    monkeypatch.setattr(QtWidgets.QMessageBox, 'warning', lambda *args: errors.append(args[-1]))
+
+    def interact(dialog):
+        dialog.findChild(QtWidgets.QPlainTextEdit).setPlainText(contents.pop(0))
+        dialog.findChild(QtWidgets.QDialogButtonBox).accepted.emit()
+        return 0
+
+    monkeypatch.setattr(QtWidgets.QDialog, 'exec_', interact)
+    window.edit_navigation_config()
+    assert errors and config.read_text() == original
+    window.edit_navigation_config()
+    assert config.read_text() == original.replace('20.0', '21.0')
     window.close()
 
 

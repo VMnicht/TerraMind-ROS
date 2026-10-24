@@ -68,7 +68,7 @@ void BoardModel::targets()
   bool active = owned_ && accepted_.enable && !accepted_.stop && !(state_.system.faults & 1);
   state_.system.mode = owned_ ? (active ? 1 : 2) : 0;
   tp::Control c = active ? accepted_ : tp::Control{};
-  // 这里 linear/angular 表示目标值；真实固件同名反馈字段的含义需独立核对。
+  // 与固件一致：linear/angular 表示应用目标，不是轮速反算的测量。
   state_.chassis.linear = c.linear;
   state_.chassis.angular = c.angular;
   state_.chassis.left_target = drive_.left_rpm(c.linear, c.angular);
@@ -79,11 +79,13 @@ void BoardModel::targets()
   state_.right.target = c.right.on ? c.right.value : 0;
   state_.mower = {c.mower.on, c.mower.on ? c.mower.value : 0};
   state_.lift.on = c.lift.on;
-  state_.lift.target = c.lift.on ? c.lift.value : 0;
-  state_.lift.valid = capabilities_ & 16;
+  // 与 LiftMapping 一致：180° -> 114°，L=111-65*cos(theta)。
+  const float max_lift = 65.0f * (1.0f + std::cos(114.0f * 0.017453292519943295f));
+  state_.lift.target = c.lift.on ? std::min(c.lift.value, max_lift) : 0;
+  state_.lift.valid = false;
   state_.sprayer.on = c.sprayer.on;
   state_.sprayer.target = c.sprayer.on ? c.sprayer.value : 0;
-  state_.sprayer.valid = capabilities_ & 32;
+  state_.sprayer.valid = false;
 }
 void BoardModel::step(double now)
 {
@@ -114,7 +116,8 @@ void BoardModel::step(double now)
   // 作业反馈使用 0.15 s 一阶响应近似；只是模型输出，不等价于真实传感器。
   state_.left.actual += (state_.left.target - state_.left.actual) * alpha;
   state_.right.actual += (state_.right.target - state_.right.actual) * alpha;
-  state_.lift.actual += (state_.lift.target - state_.lift.actual) * alpha;
-  state_.sprayer.actual += (state_.sprayer.target - state_.sprayer.actual) * alpha;
+  // 当前固件没有这两项传感器反馈，不把模型目标伪装成实测值。
+  state_.lift.actual = 0;
+  state_.sprayer.actual = 0;
 }
 }

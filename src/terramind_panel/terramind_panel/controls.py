@@ -5,6 +5,14 @@ import math
 LEGACY_CAPABILITIES = 0x000f
 CURRENT_CAPABILITIES = 0x002f
 ALL_CAPABILITIES = 0x003f
+# 当前机构安全显示上限，向下取整到面板的 0.01 mm 精度；协议仍为 0..1000。
+DEFAULT_LIFT_MAX_MM = 38.56
+
+
+def validate_lift_limit(value):
+    if not math.isfinite(value) or not 0 < value <= DEFAULT_LIFT_MAX_MM:
+        raise ValueError('lift_max_mm must be in (0, 38.56] for the current mechanism')
+    return value
 
 
 @dataclass(frozen=True)
@@ -24,7 +32,7 @@ ACTUATORS = (
     ActuatorField('left', '左播撒', 'left_rpm', 'RPM', -500, 500, 10, 1),
     ActuatorField('right', '右播撒', 'right_rpm', 'RPM', -500, 500, 10, 2),
     ActuatorField('mower', '割草刀盘', 'mower_percent', '%', 0, 100, 1, 3),
-    ActuatorField('lift', '刀盘升降', 'lift_mm', 'mm', 0, 1000, 5, 4),
+    ActuatorField('lift', '升降缩短量', 'lift_mm', 'mm', 0, 1000, 1, 4),
     ActuatorField('sprayer', '喷洒装置', 'sprayer_percent', '%', 0, 100, 1, 5),
 )
 
@@ -64,3 +72,9 @@ class Selection:
         # 保留草稿中的编辑值，只在新生成的发送快照里把关闭装置的目标归零。
         changes = {f.value_field: 0.0 for f in ACTUATORS if not getattr(self, f.key + '_on')}
         return replace(self, **changes)
+
+    def validate_device(self, capabilities, lift_max_mm=DEFAULT_LIFT_MAX_MM):
+        self.validate(capabilities)
+        validate_lift_limit(lift_max_mm)
+        if self.lift_on and self.lift_mm > lift_max_mm:
+            raise ValueError('升降目标超出当前机构行程')

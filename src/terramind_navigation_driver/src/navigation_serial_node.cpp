@@ -5,6 +5,7 @@
 #include "terramind_interfaces/msg/navigation_status.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/vector3_stamped.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include <atomic>
@@ -76,6 +77,8 @@ public:
     raw_ = create_publisher<ti::NavigationFrame>("navigation/raw", rclcpp::SensorDataQoS());
     status_ = create_publisher<ti::NavigationStatus>("navigation/status", rclcpp::QoS(1).reliable());
     pose_ = create_publisher<geometry_msgs::msg::PoseStamped>("navigation/pose", rclcpp::SensorDataQoS());
+    imu_pose_ = create_publisher<geometry_msgs::msg::PoseStamped>("navigation/imu_pose", rclcpp::SensorDataQoS());
+    path_ = create_publisher<nav_msgs::msg::Path>("navigation/path", rclcpp::QoS(1));
     velocity_ = create_publisher<geometry_msgs::msg::Vector3Stamped>("navigation/velocity", rclcpp::SensorDataQoS());
     diagnostics_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
     worker_ = std::thread([this] {run();});
@@ -90,7 +93,7 @@ private:
   {
     const auto stamp = now();
     const auto observation = session_.observe(f, received);
-    if (observation.restarted) {last_orientation_.reset();}
+    if (observation.restarted) {last_orientation_.reset(); clear_path();}
     latest_ = f;
     ti::NavigationFrame raw;
     raw.header.stamp = stamp; raw.header.frame_id = imu_frame_ + "_frd";
@@ -109,6 +112,17 @@ private:
         f.latitude_rad * 180 / pi, f.longitude_rad * 180 / pi, f.height_m);
     }
     const auto result = coordinates_.convert(f);
+    // 辨识始终使用未扣除杆臂的测量点，已有外参也不能再次扣除。
+    geometry_msgs::msg::PoseStamped imu_pose;
+    imu_pose.header.stamp = stamp; imu_pose.header.frame_id = frame_;
+    imu_pose.pose.position.x = result.imu_position.x();
+    imu_pose.pose.position.y = result.imu_position.y();
+    imu_pose.pose.position.z = result.imu_position.z();
+    imu_pose.pose.orientation.w = result.imu_orientation.w();
+    imu_pose.pose.orientation.x = result.imu_orientation.x();
+    imu_pose.pose.orientation.y = result.imu_orientation.y();
+    imu_pose.pose.orientation.z = result.imu_orientation.z();
+    imu_pose_->publish(imu_pose);
     Eigen::Quaterniond orientation = calibrated_ ? result.base_orientation : result.imu_orientation;
     if (last_orientation_ && orientation.dot(*last_orientation_) < 0) {orientation.coeffs() *= -1;}
     last_orientation_ = orientation;
@@ -119,11 +133,27 @@ private:
     pose.pose.orientation.w = orientation.w(); pose.pose.orientation.x = orientation.x();
     pose.pose.orientation.y = orientation.y(); pose.pose.orientation.z = orientation.z();
     pose_->publish(pose);
+    // 轨迹只供观察，10 Hz 抽样且最多保留 2000 点；新会话不连线。
+    if (trajectory_.poses.empty() || received - last_path_time_ >= 0.1) {
+      trajectory_.header = pose.header;
+      if (trajectory_.poses.size() >= 2000) {trajectory_.poses.erase(trajectory_.poses.begin());}
+      trajectory_.poses.push_back(pose);
+      path_->publish(trajectory_);
+      last_path_time_ = received;
+    }
     // 协议没有角速度；该速度始终属于 IMU 中心，不伪造车辆控制点速度。
     geometry_msgs::msg::Vector3Stamped velocity;
     velocity.header = pose.header;
     velocity.vector.x = result.imu_velocity.x(); velocity.vector.y = result.imu_velocity.y();
     velocity.vector.z = result.imu_velocity.z(); velocity_->publish(velocity);
+  }
+  void clear_path()
+  {
+    trajectory_.poses.clear();
+    trajectory_.header.stamp = now();
+    trajectory_.header.frame_id = frame_;
+    // SIGINT 可先关闭 ROS 上下文；异常恢复路径不得再抛异常终止工作线程。
+    try {path_->publish(trajectory_);} catch (const rclcpp::exceptions::RCLError &) {}
   }
   void report(double t)
   {
@@ -177,6 +207,7 @@ private:
         double t = steady_seconds();
         if (!port_.is_open() && t >= next_open) {
           port_.open(device_, baud_); parser_.reset(); session_.connect(t);
+          clear_path();
           if (opened_once) {++reconnects_;}
           opened_once = true; latest_.reset(); last_orientation_.reset(); port_error_.clear();
           RCLCPP_INFO(get_logger(), "Receiving navigation on %s at %d baud", device_.c_str(), baud_);
@@ -192,6 +223,7 @@ private:
         }
       } catch (const std::exception & e) {
         port_.close(); parser_.reset(); session_.disconnect(); latest_.reset(); last_orientation_.reset();
+        clear_path();
         if (port_error_ != e.what()) {RCLCPP_WARN(get_logger(), "%s", e.what());}
         port_error_ = e.what(); next_open = steady_seconds() + retry_;
       }
@@ -219,6 +251,10 @@ private:
   rclcpp::Publisher<ti::NavigationFrame>::SharedPtr raw_;
   rclcpp::Publisher<ti::NavigationStatus>::SharedPtr status_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr imu_pose_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_;
+  nav_msgs::msg::Path trajectory_;
+  double last_path_time_ = 0;
   rclcpp::Publisher<geometry_msgs::msg::Vector3Stamped>::SharedPtr velocity_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_;
 };

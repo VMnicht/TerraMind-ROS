@@ -8,7 +8,7 @@ namespace terramind::protocol
 using Bytes = std::vector<uint8_t>;
 constexpr uint8_t CONTROL = 0x01, STATUS = 0x81;
 // 能力位 bit0～bit5：底盘、左播撒、右播撒、刀盘、升降、喷洒。
-// 当前板卡为 0x002F（不含升降）；运行时以状态帧上报的能力为准。
+// 0x002F 为兼容模拟默认值；实机升降/喷洒能力取决于初始化，运行时以回传为准。
 constexpr uint16_t CURRENT_CAPABILITIES = 0x002f;
 constexpr double FIRMWARE_TIMEOUT = 0.250;
 enum class Result : uint8_t { OK=0, BAD_FRAME=1, BAD_VALUE=2, UNSUPPORTED=3, TIMEOUT=4 };
@@ -43,7 +43,7 @@ struct System
 };
 struct Chassis
 {
-  // linear/angular 为 m/s、rad/s，轮速为 RPM；真实反馈轴侧尚待固件确认。
+  // linear/angular 为应用目标 m/s、rad/s；真实 RPM 为减速器输出轴反馈。
   float linear = 0, angular = 0, left_target = 0, right_target = 0, left_actual = 0,
     right_actual = 0;
 };

@@ -48,4 +48,5 @@ fi
 source "$workspace_dir/install/local_setup.bash"
 export ROS_LOG_DIR="${ROS_LOG_DIR:-$workspace_dir/log/ros}"
 mkdir -p "$ROS_LOG_DIR"
-exec ros2 run terramind_panel control_panel "${panel_arguments[@]}"
+exec ros2 run terramind_panel control_panel --ros-args \
+  --params-file "$workspace_dir/src/terramind_bringup/config/control.yaml" "${panel_arguments[@]}"

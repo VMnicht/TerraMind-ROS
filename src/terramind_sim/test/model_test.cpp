@@ -79,8 +79,8 @@ TEST(Model, SprayerOnOffTimeoutAndLegacyBoard) {
   EXPECT_TRUE(current.state().sprayer.on);
   EXPECT_FLOAT_EQ(current.state().sprayer.target, 40);
   current.step(.1);
-  EXPECT_TRUE(current.state().sprayer.valid);
-  EXPECT_GT(current.state().sprayer.actual, 0);
+  EXPECT_FALSE(current.state().sprayer.valid);
+  EXPECT_FLOAT_EQ(current.state().sprayer.actual, 0);
   EXPECT_FALSE(current.state().lift.valid);
   c.sprayer.on = false;
   current.accept(c, 2, .11);
@@ -98,4 +98,27 @@ TEST(Model, SprayerOnOffTimeoutAndLegacyBoard) {
   EXPECT_EQ(legacy.state().system.result, uint8_t(tp::Result::UNSUPPORTED));
   EXPECT_FALSE(legacy.state().sprayer.on);
   EXPECT_FALSE(legacy.state().sprayer.valid);
+}
+TEST(Model, LiftMechanicalLimitAndDisabledReturnTarget) {
+  ts::BoardModel m({}, 63);
+  tp::Control c;
+  c.enable = true;
+  c.lift = {true, 1000};
+  m.accept(c, 1, 0);
+  EXPECT_EQ(m.state().system.result, 0);
+  EXPECT_NEAR(m.state().lift.target, 38.56212, .0001);
+  EXPECT_FALSE(m.state().lift.valid);
+  EXPECT_FLOAT_EQ(m.state().lift.actual, 0);
+  c.lift.value = 20;
+  m.accept(c, 2, .02);
+  EXPECT_FLOAT_EQ(m.state().lift.target, 20);
+  c.lift.on = false;
+  m.accept(c, 3, .04);
+  EXPECT_FALSE(m.state().lift.on);
+  EXPECT_FLOAT_EQ(m.state().lift.target, 0);
+  c.lift.on = true;
+  m.accept(c, 4, .06);
+  m.step(.311);
+  EXPECT_FALSE(m.state().lift.on);
+  EXPECT_FLOAT_EQ(m.state().lift.target, 0);
 }

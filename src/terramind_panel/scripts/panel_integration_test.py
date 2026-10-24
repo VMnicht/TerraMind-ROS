@@ -75,6 +75,9 @@ def main():
         def stopped():
             return (node.phase == 'idle' and node.board.mode == 2 and not node.control.enabled
                     and node.board.chassis.left_target_rpm == 0 and not node.board.mower.on
+                    and node.board.chassis.right_target_rpm == 0
+                    and not node.board.left_spreader.on and not node.board.right_spreader.on
+                    and not node.board.lift.on and node.board.lift.target_mm == 0
                     and not node.board.sprayer.on and node.board.sprayer.target_percent == 0)
 
         try:
@@ -97,7 +100,8 @@ def main():
             assert window.checks['sprayer'].isEnabled() == bool(args.capabilities & 32)
             window.editors['linear_mps'].setValue(.12)
             window.editors['angular_radps'].setValue(-.4)
-            targets = dict(left_rpm=-120., right_rpm=180., mower_percent=12., lift_mm=80., sprayer_percent=25.)
+            assert window.editors['lift_mm'].maximum() == node.lift_max_mm
+            targets = dict(left_rpm=-120., right_rpm=180., mower_percent=12., lift_mm=20., sprayer_percent=25.)
             for field in ACTUATORS:
                 window.editors[field.value_field].setValue(targets[field.value_field])
                 window.checks[field.key].setChecked(bool(args.capabilities & (1 << field.bit)))
@@ -107,13 +111,29 @@ def main():
                  and node.board.left_spreader.target_rpm == -120.
                  and node.board.right_spreader.target_rpm == 180.
                  and node.board.mower.throttle_set_percent == 12.
-                 and (not args.capabilities & 16 or node.board.lift.target_mm == 80.)
+                 and (not args.capabilities & 16 or node.board.lift.target_mm == 20.)
                  and (not args.capabilities & 32 or node.board.sprayer.target_percent == 25.))
             pump(.3)
             assert node.board.result == 0
+            if args.capabilities & 16:
+                assert not node.board.lift.feedback_valid and node.board.lift.actual_mm == 0
+                window.editors['lift_mm'].setValue(1000.)
+                assert window.editors['lift_mm'].value() == node.lift_max_mm
+                pump(.15)
+                assert node.board.lift.target_mm == 20.  # 草稿没有应用
+                window.apply_button.click()
+                wait(lambda: abs(node.board.lift.target_mm - node.lift_max_mm) < 1e-4)
+                window.checks['lift'].setChecked(False)
+                window.apply_button.click()
+                wait(lambda: not node.board.lift.on and node.board.lift.target_mm == 0)
+                assert window.editors['lift_mm'].value() == node.lift_max_mm
+                window.checks['lift'].setChecked(True)
+                window.editors['lift_mm'].setValue(20.)
+                window.apply_button.click()
+                wait(lambda: node.board.lift.on and node.board.lift.target_mm == 20.)
             if args.capabilities & 32:
-                assert node.board.sprayer.on and node.board.sprayer.feedback_valid
-                assert node.board.sprayer.actual_percent > 0
+                assert node.board.sprayer.on and not node.board.sprayer.feedback_valid
+                assert node.board.sprayer.actual_percent == 0
                 # 喷洒独立验证草稿/应用和关闭归零，不借助底盘目标变化。
                 window.editors['sprayer_percent'].setValue(40.)
                 pump(.15)

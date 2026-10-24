@@ -5,3 +5,10 @@
     state_timeout_s: 0.150
     # 当前仿真使用实际时间；尚不支持 /clock 暂停或时间回跳。
     use_sim_time: false
+terramind_panel:
+  ros__parameters:
+    # 当前升降机构缩短量上限，向下取整至 0.01 mm；关闭/停止后回零。
+    lift_max_mm: 38.56
+    # 自动区域作业：最终位置/朝向需连续 0.8 秒同时达标。
+    coverage_position_tolerance_m: 0.03
+    coverage_yaw_tolerance_rad: 0.035

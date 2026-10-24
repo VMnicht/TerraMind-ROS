@@ -1,0 +1,42 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Global Options:
+    Fixed Frame: navigation_map
+    Background Color: 35; 40; 48
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+    - Class: rviz_default_plugins/Pose
+      Name: Navigation pose
+      Enabled: true
+      Topic:
+        Value: /navigation/pose
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
+      Shape: Arrow
+    - Class: rviz_default_plugins/Path
+      Name: Navigation trajectory
+      Enabled: true
+      Topic:
+        Value: /navigation/path
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
+      Color: 40; 210; 170
+      Line Style: Lines
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 30
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+Window Geometry:
+  Width: 1100
+  Height: 800

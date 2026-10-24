@@ -10,7 +10,7 @@ bool mower_on
 # 刀盘油门百分比 [0, 100]，不是实际转速。
 float32 mower_percent
 bool lift_on
-# 升降目标高度 [0, 1000] mm；需板卡支持 bit4。
+# 升降缩短量协议范围 [0, 1000] mm；bit4。当前机构限幅约 38.562 mm，关闭回零。
 float32 lift_mm
 bool sprayer_on
 # 喷洒目标 [0, 100]%；需板卡支持 bit5。

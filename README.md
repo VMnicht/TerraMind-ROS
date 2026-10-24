@@ -8,7 +8,7 @@ ROS 2 Humble 工作区，包含 USART3 控制板通讯、导航板接收与坐�
 
 导航板 v1 已接入：独立 460800 串口、80 字节流式解包、WGS84→固定 ENU、姿态换轴和安装杆臂。启动、原点/外参配置、时间语义及测试见 [导航接入与坐标换算](src/doc/导航接入与坐标换算.md)。导航首版发布独立定位话题，不发布动态 TF；实机安装参数仍需标定。
 
-开发环境：Ubuntu 22.04、ROS 2 Humble、C++17。Python 辅助工具使用系统 Python，不需要 pyserial。依赖由各包的 `package.xml` 声明；标准 ROS desktop 环境还需要 colcon、ament_cmake_gtest、ament_cmake_pytest、python3-yaml、python3-pyqt5、python3-pytest。若缺少面板依赖，可用 `sudo apt install python3-pyqt5 python3-pytest ros-humble-ament-cmake-pytest` 安装。
+开发环境：Ubuntu 22.04、ROS 2 Humble、C++17。Python 辅助工具使用系统 Python，不需要 pyserial。依赖由各包的 `package.xml` 声明；标准 ROS desktop 环境还需要 colcon、ament_cmake_gtest、ament_cmake_pytest、python3-yaml、python3-pyqt5、python3-pytest。若缺少面板依赖，可用 `sudo apt install python3-pyqt5 python3-pytest fonts-noto-cjk ros-humble-ament-cmake-pytest` 安装，中文字体用于避免界面显示方框。
 
 ```bash
 cd TerraMind  # 切换到克隆得到的工作区根目录，路径以本机为准
@@ -19,6 +19,10 @@ source install/setup.bash
 
 后续每个新终端均需加载 ROS 和本工作区的 `install/setup.bash`。
 
+实际部署到另一台 Linux 主机时，按 [Linux 主机接板部署](src/doc/开发指南.md#linux-主机接板部署) 安装依赖、在目标机重新构建并填写两个串口路径。该流程包含串口权限、导航参数保存和有/无图形界面的启动方式。
+
+本次 Ubuntu22-E（WSL）验证中，默认 Fast DDS 的本机发现/服务通信不稳定，切换 Cyclone DDS 后串口发现和 ROS 控制链路测试通过。该环境安装 `sudo apt install ros-humble-rmw-cyclonedds-cpp`；三个启动脚本会在 WSL 中优先使用已安装的 Cyclone DDS，并保留显式设置的 `RMW_IMPLEMENTATION`。直接运行 ROS 命令或测试前执行 `source scripts/native_gui_env.sh`，确保同一组节点使用一致的中间件。
+
 ### Snap 终端中的图形程序启动失败
 
 如果出现 `/snap/core20/.../libpthread.so.0: undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE`，说明系统程序混用了 Snap 内的运行库。Snap 编辑器终端继承的 `GTK_PATH`、GIO/Qt 插件路径或动态库路径可能导致此问题。`start_panel.sh`、`start_sim.sh` 和 `start_debug.sh` 会在加载 ROS 前过滤相关变量中的 Snap 路径，保留其他路径；清理仅作用于启动进程及其子进程，不修改终端或系统配置。脚本修改后直接重新启动，无需编译。
@@ -27,7 +31,7 @@ source install/setup.bash
 
 ## 图形化调试总面板
 
-日常调试可以直接打开工程中的 `TerraMind-Debug.desktop`（当前工作区路径为 `/home/tang/TerraMind`），或使用桌面上的 **TerraMind 调试总面板** 快捷方式。也可以运行 `./start_debug.sh`。总面板本身只依赖系统 Python 和 PyQt5，无需提前 source ROS，也无需先构建工作区。
+日常调试可以直接打开工程中的 `TerraMind-Debug.desktop`（当前工作区路径为 `/home/tang/TerraMind-ROS`），或运行 `./start_debug.sh`。总面板本身只依赖系统 Python 和 PyQt5，无需提前 source ROS，也无需先构建工作区。
 
 - **启动调试环境**：选择二维仿真、虚拟串口或真实控制板，点击“启动所选后端”。可选择同时打开控制面板、RViz、模拟能力位和 ROS 域；真实串口可使用 `auto` 或填写 `/dev/` 下的路径。
 - **编译 / 更新工作区**：修改源码后点击编译。启动功能时如缺少关键构建产物，会先编译，成功后自动继续；编译失败或被停止时取消后续启动。
@@ -76,6 +80,35 @@ ros2 service call /control/stop std_srvs/srv/Trigger '{}'
 
 ## 控制面板
 
+### 矩形区域作业
+
+在二维仿真中运行 `./start_sim.sh capabilities:=63`，打开控制面板的“区域作业”页：
+
+1. 停稳并收到至少 0.4 秒稳定定位后，点击“以当前位置建区”。当前位置和朝向锁定为初始位姿，后续实时位置变化不会拖动区域。
+2. 按住鼠标左键拖动对角点；矩形坐标 X 沿建区时的车头方向，Y 向左，支持四个拖拽方向。滚轮缩放，也可精确填写对角 X/Y。
+3. 输入车宽/有效割幅及速度，点击“生成路线”。横向等分为 `ceil(区域宽度/割幅)` 行，行距不超过割幅；相邻行通过半圆掉头连接。矩形是作业覆盖范围，车身和掉头允许越出区域。
+4. 在手动页设置所需刀盘油门与升降缩短量，再回区域页核对“启动设定”。未开启刀盘时仅行驶验证。覆盖直线开启所选刀盘，进入/掉头/返航关闭刀盘；升降目标在任务中保持，停止时按固件行为回零。播撒和喷洒不自动开启。
+5. 点击“开始区域作业”。完成覆盖后返回记录的初始位置，再恢复初始朝向；最终位置和角度连续 0.8 秒同时满足容差才完成并撤销使能。规划终点严格等于初始位姿，实际到位使用容差。
+
+默认位置容差 0.03 m、角度容差 0.035 rad（约 2°），在 `control.yaml` 的 `coverage_position_tolerance_m` / `coverage_yaw_tolerance_rad` 配置，重启面板生效。停止全部、定位过期、会话/原点/连接改变、偏离路径和界面卡顿均停止任务；不会在恢复连接后自动续跑。运行中不能应用手动目标或修改区域。
+
+真实板卡使用“导航板 · 实机定位”，订阅现有 `navigation/pose` 和 `navigation/status`。需导航有效、原点就绪、安装外参已标定且位姿参考点为 `base_link`；真实控制板拒绝仿真真值和模拟导航。实机入口与串口配置沿用 [Linux 主机接板部署](src/doc/开发指南.md#linux-主机接板部署)，随后在同一面板操作。独立面板连接仿真时可在区域页手动选择“二维仿真 · 模型真值”；实机默认不使用该来源。
+
+规划、跟踪和定位门控分别位于 `terramind_panel` 的 `coverage.py`、`coverage_tracking.py`、`coverage_runtime.py`，画布位于 `coverage_widget.py`。所有运动指令仍经原控制管理和串口保护链路。
+
+```bash
+# 无硬件验收：真实 Qt 控件 + ROS 控制管理 + 带加速度限制的模型。
+ros2 run terramind_panel coverage_integration_test.py
+# 以导航接入话题运行，同步注入 200 ms 测量延迟和定位失效。
+ros2 run terramind_panel coverage_integration_test.py --pose-source navigation
+```
+
+测试中的导航输入是模型测量转换的测试消息，不是真实 GNSS；导航串口解包和坐标换算由独立 `navigation_integration_test.py` 验证。运行期间系统时钟需稳定；时间跳变会触发已有新鲜度保护停机，不会忽略时间异常继续作业。
+
+当前 F4 固件已接入升降：初始化成功时上报 bit4，喷洒初始化成功时上报 bit5。面板按实际能力开放控件。`control.yaml` 中 `terramind_panel.lift_max_mm` 限制当前机构可输入的缩短量（默认 38.56 mm，可设更小值）；协议本身仍允许 0～1000 mm。关闭升降或停止全部后，固件逐步回到初始位置，不是保持当前位置。升降与喷洒没有有效测量反馈，模拟后端也按此返回无效反馈，不显示目标为实际位置或流量。
+
+实机模式可在调试总面板勾选导航，指定端口、选择和编辑原点/外参 YAML，并打开 RViz 位姿轨迹。控制面板“导航状态”页显示质量与参考点。独立导航、固定原点复用和参数优先级见 [导航接入与坐标换算](src/doc/导航接入与坐标换算.md)。
+
 测试全部可控装置的一键入口：
 
 ```bash
@@ -100,7 +133,7 @@ ros2 run terramind_panel control_panel
 | 底盘线速度、角速度 | −0.35～0.35 m/s；−2～2 rad/s |
 | 左、右播撒 | 各自开关；−500～500 RPM |
 | 割草刀盘 | 开关；0～100% |
-| 刀盘升降 | 开关；0～1000 mm，需后端支持 |
+| 刀盘升降 | 开关；当前机构缩短量 0～38.56 mm，需后端支持；关闭/停止后逐步回零 |
 | 喷洒装置 | 开关；0～100%，需后端支持 |
 
 喷洒模块沿用 v1 的 `0x50` 控制块：勾选“喷洒装置”，设置 0～100% 目标，开始发送或应用修改即可。实机只有在状态帧上报能力 bit5 时才开放控件；`feedback_valid=false` 时显示“反馈无效”，不会把设定值当成实测反馈。
@@ -151,6 +184,8 @@ ros2 service call /control/set_enabled std_srvs/srv/SetBool '{data: true}'
 
 ## 参数
 
+导航板位于前轴时，可通过 `navigation.yaml` 的 `imu_translation_in_base_m` 将定位换算到后轴中心；默认值是占位，尚未启用。新增 `ros2 run terramind_panel calibrate_lever_arm --config /绝对路径/navigation.yaml --output /绝对路径/navigation-identified.yaml`，正反各自转一圈辨识水平偏移。高度和安装旋转保留为手动参数。启动、应用结果及纯仿真验证见[后轴偏移与两圈自转辨识](src/doc/导航接入与坐标换算.md#后轴偏移配置与两圈自转辨识)。
+
 | 文件 | 内容 |
 |---|---|
 | `src/terramind_bringup/config/serial.yaml` | 自动/手动串口、候选路径、扫描监听窗口、115200 波特率、20 ms 发送周期、重连间隔 |
@@ -158,7 +193,7 @@ ros2 service call /control/set_enabled std_srvs/srv/SetBool '{data: true}'
 | `src/terramind_bringup/config/robot.yaml` | 真实轮径、轮距及反馈口径，当前待标定 |
 | `src/terramind_bringup/config/sim.yaml` | 明确标注的演示尺寸、运动响应和能力位 |
 
-你后续需要填写真实 `wheel_diameter_m` 和 `wheel_separation_m`。这些参数不参与当前真实串口发送，真实运动控制无需等待机械参数。`robot.yaml` 当前是标定记录，尚未启用真实轮式里程计；其中的零值表示未知，绝不能作为实际尺寸。仿真使用独立的 0.20 m 轮径和 0.45 m 轮距演示配置，这些值不是实际机器人测量值。
+`robot.yaml` 已记录当前 F4 固件配置：轮径 0.10 m、轮距 0.32 m、减速比 19.2032 和方向修正；这些是源码配置，不代表本轮已完成实测标定。它不参与真实串口发送，尚未启用真实轮式里程计，输出轴到车轮的传动关系仍待现场核对。仿真使用独立的 0.20 m 轮径和 0.45 m 轮距演示配置，这些值不是实际机器人测量值。
 
 ## 验证
 
@@ -185,9 +220,9 @@ ROS 进程测试自动创建隔离的 ROS 域，只启动仿真或 PTY 后端，
 
 - 这是运行于真实时间、1 倍速的二维运动模型，`use_sim_time` 必须为 false；没有 Gazebo、碰撞、打滑或草叶切割物理仿真。
 - `/sim/ground_truth` 和 `sim_world → base_link` 仅用于仿真观察。当前不发布真实 `/odom`，也未实现导航融合。
-- 仿真轮速按车轮轴计算；真实状态的 RPM 轴侧、减速比、线速度反馈语义仍待固件核对。v1 没有独立轮速反馈新鲜度标志。
+- 仿真轮速按车轮轴计算；真实 RPM 为转子 RPM 除以 19.2032 后的减速器输出轴反馈，保留固件左右符号；线速度、角速度是板端应用目标。v1 没有独立轮速反馈新鲜度标志。
 - 仿真播撒舵机角度暂为 0，占位表示尚未建模；接收错误计数采用饱和计数，具体固件统计口径仍需对照固件。虚拟 UART5 输入固定为零。
-- 默认 `0x002F` 能力包含喷洒，升降仍关闭；旧 `0x000F` 板卡继续禁用喷洒。真实串口始终按状态帧能力位检查，不通过修改默认值强行开放硬件。
+- 模拟默认 `0x002F` 保留无升降兼容场景；`0x003F` 可测试全部装置。当前固件在升降、喷洒初始化成功时上报相应能力，真实串口始终按回传检查。
 - 物理急停和真实机械停机距离不由这个软件验证。固件 250 ms 保护依赖其控制任务持续运行。
 - 本次软件验证与真实控制板联调是两件事；实际 USB 串口、电机方向和真实执行反馈需要现场验证。
 

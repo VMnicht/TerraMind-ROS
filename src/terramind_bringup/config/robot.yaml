@@ -1,9 +1,12 @@
-# 真实机器标定记录，当前 launch 不加载此文件；0 表示未知，不是物理尺寸。
+# 固件配置记录，当前 launch 不加载；配置值尚未通过本轮实机标定。
 # 实机驱动直接下发 m/s、rad/s，不依赖这里的轮径和轮距。
 robot:
   geometry_calibrated: false
-  wheel_diameter_m: 0.0
-  wheel_separation_m: 0.0
-  # RPM 反馈来自电机轴还是车轮轴、以及减速比，需与固件和机械参数核对。
-  rpm_feedback_axis: unconfirmed
+  wheel_diameter_m: 0.10
+  wheel_separation_m: 0.32
+  rpm_feedback_axis: gearbox_output
+  motor_gear_ratio: 19.2032
+  firmware_right_reversed: true
+  firmware_angular_reversed: true
+  # 输出轴到车轮的外部传动仍待现场核对，禁止用未知值生成里程计。
   motor_to_wheel_ratio: 0.0

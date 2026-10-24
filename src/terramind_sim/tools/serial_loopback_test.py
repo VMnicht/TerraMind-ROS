@@ -126,7 +126,7 @@ def main():
             os.write(fd, control(7, flags=1, sprayer=37.5))
             reader.wait(lambda s: s['seq'] == 7 and s['result'] == 0 and s['caps'] == 47
                         and s['spray_on'] and s['spray_target'] == 37.5
-                        and s['spray_valid'] and s['spray_actual'] > 0)
+                        and not s['spray_valid'] and s['spray_actual'] == 0)
             os.write(fd, control(8, flags=1, sprayer=101.))
             reader.wait(lambda s: s['seq'] == 8 and s['result'] == 2 and s['spray_target'] == 37.5)
             reader.wait(lambda s: s['faults'] & 1 and not s['spray_on'] and s['spray_target'] == 0)

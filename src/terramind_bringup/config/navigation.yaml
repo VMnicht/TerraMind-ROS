@@ -11,6 +11,7 @@ navigation_serial_node:
     allow_simulated: false
     map_frame: navigation_map
     imu_frame: navigation_imu
+    # base_link 原点：左右驱动轮轴线的中点（后轴），x 前、y 左、z 上。
     base_frame: base_link
     # first_valid：首个合格测量建立原点，当前进程内重连保留原点。
     # 正式作业改为 fixed 并填写保存的 WGS84 经纬度/椭球高。
@@ -20,7 +21,12 @@ navigation_serial_node:
     origin_longitude_deg: 0.0
     origin_height_m: 0.0
     # 未标定时 pose 输出 IMU 中心/FLU，不能当作车辆控制点位姿。
+    # 未测量时保持 false；确认下面的平移、安装姿态后才改为 true。
     extrinsics_calibrated: false
+    # 后轴中心 -> 导航板输出的定位参考点，表达于车体 FLU，单位 m。
+    # 前方为正 x；正反自转辨识只估计 x/y，z 需测量填写。
     imu_translation_in_base_m: [0.0, 0.0, 0.0]
+    # 导航 IMU 的 FLU 坐标系到车体 FLU 的安装旋转，顺序 w,x,y,z。
+    # 单位四元数只是占位；自转辨识不能同时求出安装角与车体杆臂。
     # 将“导航机体系经 FRD->FLU 后”的向量旋转到 base_link；不是原始传感器轴。
     imu_rotation_in_base_wxyz: [1.0, 0.0, 0.0, 0.0]

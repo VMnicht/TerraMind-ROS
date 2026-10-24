@@ -4,11 +4,20 @@ project(terramind_panel)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
-install(PROGRAMS scripts/control_panel scripts/debug_panel scripts/panel_integration_test.py
-  scripts/debug_launcher_integration_test.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/control_panel scripts/debug_panel scripts/calibrate_lever_arm scripts/panel_integration_test.py
+  scripts/debug_launcher_integration_test.py scripts/coverage_integration_test.py
+  scripts/lever_arm_integration_test.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(lever_arm test/test_lever_arm.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
   ament_add_pytest_test(panel_controls test/test_controls.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
+  ament_add_pytest_test(coverage_geometry test/test_coverage.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
+  ament_add_pytest_test(coverage_tracking test/test_coverage_tracking.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
+  ament_add_pytest_test(coverage_runtime test/test_coverage_runtime.py
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR} TIMEOUT 30)
   ament_add_pytest_test(debug_launcher test/test_debug_launcher.py
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}

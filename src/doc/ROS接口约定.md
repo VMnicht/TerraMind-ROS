@@ -46,6 +46,8 @@ ControlCommand 中 connection_id 必须匹配当前 McuState。控制帧自身 u
 
 `terramind_panel/control_panel` 发布 `cmd_vel`、`implements/command` 并调用使能/停止服务；订阅 `mcu/state`、`control/status`、`mcu/command`、`diagnostics`。它不发布 `mcu/command`，也不直接打开串口。启动前和发送中检查额外的上层发布者及重复后端，冲突时拒绝或停止发送；这只是面板的冲突检查，不构成系统级控制权仲裁。多个机器人使用独立 ROS 域，或给所有节点一致设置命名空间。
 
+区域作业与手动调试共用上述唯一发布入口，自动作业期间拒绝手动开始/应用。区域作业额外订阅 `navigation/pose`（sensor data QoS）、`navigation/status`（reliable）和 `sim/ground_truth`（reliable）。`coverage_pose_source` 默认 `navigation`，仿真 launch 设为 `simulation`；仿真真值只允许用于标记为 simulated 的后端。实机自动执行要求有效、新鲜且标定到 `base_link` 的导航位姿。建区保存定位原点、会话及控制板连接标识；任一变化使当前任务停止。原有 150 ms 状态/指令保护及固件 250 ms 看门狗不变。
+
 完整作业指令显式使用 left_rpm、right_rpm、mower_percent、lift_mm、sprayer_percent 等单位字段。装置关闭后模型和固件将其执行目标置零，字段本身仍需要满足协议范围。PC 控制管理节点拒绝非法值，不通过裁剪来悄悄改变上层指令。
 
 McuState.header.stamp 是 PC 接收/仿真生成时间，不是传感器采样时间。uptime_ms 是板卡运行时间。link_ready 是 PC 的会话健康判断，不代表每个传感器独立有效。simulated 是启动后端的标识，不是网络认证机制。真实轮速暂缺少新鲜度标志，刀盘状态仅有设定油门。
@@ -54,4 +56,4 @@ McuState.header.stamp 是 PC 接收/仿真生成时间，不是传感器采样�
 
 ## 导航接口
 
-导航节点独立使用 navigation/raw（NavigationFrame）、navigation/status（NavigationStatus）、navigation/pose（PoseStamped）、navigation/velocity（Vector3Stamped）和 diagnostics。Header 是 PC 接收时间；姿态输出点由 status.pose_child_frame 声明，速度始终属于 IMU 中心。使用定位需同时检查 usable 和 origin_ready，并按 session_id 分段。完整的坐标、时间、有效性和 QoS 约定见 [导航接入与坐标换算](导航接入与坐标换算.md)。
+导航节点独立使用 navigation/raw（NavigationFrame）、navigation/status（NavigationStatus）、navigation/pose（PoseStamped）、navigation/imu_pose（PoseStamped）、navigation/velocity（Vector3Stamped）和 diagnostics。Header 是 PC 接收时间；pose 输出点由 status.pose_child_frame 声明，imu_pose 始终保留未补偿的 IMU 中心位置及 IMU FLU 姿态，速度始终属于 IMU 中心。base_link 定义为后轴差速轮轴线中点。使用定位需同时检查 usable 和 origin_ready，并按 session_id 分段。完整的坐标、时间、有效性和 QoS 约定见 [导航接入与坐标换算](导航接入与坐标换算.md)。

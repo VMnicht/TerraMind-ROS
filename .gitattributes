@@ -1,0 +1,2 @@
+# This workspace executes shell/Python entry points on Linux (including WSL).
+* text=auto eol=lf

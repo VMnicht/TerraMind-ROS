@@ -9,6 +9,7 @@ from pathlib import Path
 import shlex
 import signal
 import sys
+import yaml
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from .controls import CURRENT_CAPABILITIES, LEGACY_CAPABILITIES, ALL_CAPABILITIES
@@ -24,10 +25,12 @@ TESTS = [
     ('ROS 控制链路 · 虚拟串口', 'terramind_sim', ['ros_smoke_test.py', '--mode', 'serial']),
     ('控制面板 · 二维仿真 / 全能力', 'terramind_panel', ['panel_integration_test.py', '--mode', 'sim']),
     ('控制面板 · 虚拟串口 / 全能力', 'terramind_panel', ['panel_integration_test.py', '--mode', 'serial']),
-    ('控制面板 · 当前板卡 / 含喷洒', 'terramind_panel', ['panel_integration_test.py', '--mode', 'sim', '--capabilities', str(CURRENT_CAPABILITIES)]),
+    ('控制面板 · 兼容板卡 / 含喷洒', 'terramind_panel', ['panel_integration_test.py', '--mode', 'sim', '--capabilities', str(CURRENT_CAPABILITIES)]),
     ('控制面板 · 虚拟串口 / 含喷洒', 'terramind_panel', ['panel_integration_test.py', '--mode', 'serial', '--capabilities', str(CURRENT_CAPABILITIES)]),
     ('控制面板 · 旧板卡 / 不含喷洒', 'terramind_panel', ['panel_integration_test.py', '--mode', 'sim', '--capabilities', str(LEGACY_CAPABILITIES)]),
     ('调试总面板 · 启动与停止联调', 'terramind_panel', ['debug_launcher_integration_test.py']),
+    ('导航板 · 私有串口与坐标测试', 'terramind_navigation_driver', ['navigation_integration_test.py']),
+    ('区域作业 · 画区、覆盖与返航仿真', 'terramind_panel', ['coverage_integration_test.py']),
 ]
 STYLE = '''
 QWidget { font-family: "Noto Sans CJK SC"; font-size: 13px; color: #203743; }
@@ -62,13 +65,24 @@ class Task:
     panel: bool = False
 
 
-def backend_task(mode, capabilities=CURRENT_CAPABILITIES, rviz=True, panel=True, device='auto'):
+def backend_task(mode, capabilities=CURRENT_CAPABILITIES, rviz=True, panel=True, device='auto',
+                 navigation=False, navigation_device='', navigation_config=''):
     arguments = [f'panel:={str(panel).lower()}']
     if mode == 'real':
         device = device.strip() or 'auto'
         if device != 'auto' and not device.startswith('/dev/'):
             raise ValueError('实机串口请填写 auto 或 /dev/ 下的设备路径')
         arguments.append('device:=' + device)
+        if navigation:
+            navigation_device = navigation_device.strip()
+            if navigation_device and not navigation_device.startswith('/dev/'):
+                raise ValueError('导航串口请留空使用配置，或填写 /dev/ 下的设备路径')
+            config = Path(navigation_config).expanduser()
+            if not config.is_file():
+                raise ValueError('导航配置文件不存在')
+            arguments.extend(['navigation:=true', 'navigation_device:=' + navigation_device,
+                              'navigation_config:=' + str(config.resolve()),
+                              f'navigation_rviz:={str(rviz).lower()}'])
     else:
         arguments.append(f'capabilities:={capabilities}')
         if mode == 'sim':
@@ -208,9 +222,22 @@ class DebugWindow(QtWidgets.QMainWindow):
         self.device = QtWidgets.QLineEdit('auto')
         self.device.setPlaceholderText('auto 或 /dev/serial/by-id/…')
         form.addRow('实机端口', self.device)
+        self.navigation = QtWidgets.QCheckBox('同时接入导航板')
+        form.addRow(self.navigation)
+        self.navigation_device = QtWidgets.QLineEdit()
+        self.navigation_device.setPlaceholderText('留空使用导航配置中的串口')
+        form.addRow('导航端口', self.navigation_device)
+        self.navigation_config = QtWidgets.QLineEdit(str(workspace / 'src/terramind_bringup/config/navigation.yaml'))
+        self.navigation_config.setToolTip(self.navigation_config.text())
+        self.navigation_config.textChanged.connect(self.navigation_config.setToolTip)
+        config_row = QtWidgets.QHBoxLayout()
+        config_row.addWidget(self.navigation_config)
+        config_row.addWidget(self.button('选择', self.choose_navigation_config))
+        config_row.addWidget(self.button('编辑', self.edit_navigation_config))
+        form.addRow('原点 / 外参配置', config_row)
         self.capabilities = QtWidgets.QComboBox()
-        self.capabilities.addItem('当前板卡 · 47（含喷洒，不含升降）', CURRENT_CAPABILITIES)
-        self.capabilities.addItem('全部装置 · 63（仅模拟后端）', ALL_CAPABILITIES)
+        self.capabilities.addItem('兼容板卡 · 47（含喷洒，不含升降）', CURRENT_CAPABILITIES)
+        self.capabilities.addItem('全部装置 · 63（含升降和喷洒）', ALL_CAPABILITIES)
         self.capabilities.addItem('旧板卡 · 15（不含升降 / 喷洒）', LEGACY_CAPABILITIES)
         form.addRow('模拟能力', self.capabilities)
         self.domain = QtWidgets.QSpinBox()
@@ -257,7 +284,8 @@ class DebugWindow(QtWidgets.QMainWindow):
         utility_layout.addWidget(hint)
         topics = QtWidgets.QHBoxLayout()
         self.topic = QtWidgets.QComboBox()
-        self.topic.addItems(['/mcu/state', '/control/status', '/mcu/command', '/diagnostics', '/sim/ground_truth'])
+        self.topic.addItems(['/mcu/state', '/control/status', '/mcu/command', '/diagnostics', '/sim/ground_truth',
+                             '/navigation/status', '/navigation/pose', '/navigation/path'])
         topics.addWidget(self.topic, 1)
         self.observe_button = self.button('查看话题', self.observe)
         topics.addWidget(self.observe_button)
@@ -306,6 +334,7 @@ class DebugWindow(QtWidgets.QMainWindow):
         splitter.addWidget(log_area)
         splitter.setSizes([190, 260])
         self.mode.currentIndexChanged.connect(self.update_controls)
+        self.navigation.toggled.connect(self.update_controls)
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.show_log)
         self.timer.start(200)
@@ -324,6 +353,56 @@ class DebugWindow(QtWidgets.QMainWindow):
             path.mkdir(parents=True, exist_ok=True)
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(path)))
 
+    def choose_navigation_config(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, '选择导航参数', self.navigation_config.text(), 'YAML (*.yaml *.yml)')
+        if path:
+            self.navigation_config.setText(path)
+
+    def edit_navigation_config(self):
+        path = Path(self.navigation_config.text()).expanduser()
+        try:
+            original = path.read_text(encoding='utf-8')
+        except OSError as error:
+            self.notice.setText('无法读取导航配置：' + str(error))
+            return
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle('导航原点 / 外参配置')
+        dialog.resize(800, 650)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        hint = QtWidgets.QLabel('保存后需重新启动导航节点。经纬度为度，平移为米，四元数为 wxyz。')
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        editor = QtWidgets.QPlainTextEdit(original)
+        layout.addWidget(editor)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        layout.addWidget(buttons)
+
+        def save():
+            try:
+                text = editor.toPlainText()
+                config = yaml.safe_load(text)
+                if not isinstance(config, dict) or not isinstance(config.get('navigation_serial_node'), dict):
+                    raise ValueError('需要 navigation_serial_node 节点配置')
+                if not isinstance(config['navigation_serial_node'].get('ros__parameters'), dict):
+                    raise ValueError('需要 ros__parameters 参数字典')
+                # 原子保存，避免写入失败留下半份参数；保留所有现有字段。
+                output = QtCore.QSaveFile(str(path))
+                if not output.open(QtCore.QIODevice.WriteOnly):
+                    raise OSError(output.errorString())
+                payload = (text.rstrip() + '\n').encode('utf-8')
+                if output.write(payload) != len(payload) or not output.commit():
+                    raise OSError(output.errorString())
+            except (OSError, ValueError, yaml.YAMLError) as error:
+                QtWidgets.QMessageBox.warning(dialog, '未保存', str(error))
+                return
+            self.notice.setText('导航配置已保存；重新启动后端后生效。')
+            dialog.accept()
+
+        buttons.accepted.connect(save)
+        buttons.rejected.connect(dialog.reject)
+        dialog.exec_()
+
     def active(self, key=None):
         return [job for job in self.jobs if job.active and (key is None or job.task.key == key)]
 
@@ -336,7 +415,11 @@ class DebugWindow(QtWidgets.QMainWindow):
         real = self.mode.currentData() == 'real'
         self.device.setEnabled(not reserved and not backend and real)
         self.capabilities.setEnabled(not reserved and not backend and not real)
-        self.rviz.setEnabled(not reserved and not backend and self.mode.currentData() == 'sim')
+        self.navigation.setEnabled(not reserved and not backend and real)
+        self.navigation_device.setEnabled(not reserved and not backend and real and self.navigation.isChecked())
+        self.navigation_config.setEnabled(not reserved and not backend and real and self.navigation.isChecked())
+        self.rviz.setEnabled(not reserved and not backend and
+                             (self.mode.currentData() == 'sim' or (real and self.navigation.isChecked())))
         self.mode.setEnabled(not reserved and not backend)
         self.panel.setEnabled(not reserved and not backend)
         self.domain.setEnabled(not running and not reserved)
@@ -364,6 +447,7 @@ class DebugWindow(QtWidgets.QMainWindow):
             'install/terramind_sim/lib/terramind_sim/serial_board_emulator',
             'install/terramind_panel/lib/terramind_panel/control_panel',
             'install/terramind_bringup/share/terramind_bringup/launch/sim.launch.py',
+            'install/terramind_navigation_driver/lib/terramind_navigation_driver/navigation_serial_node',
         ]
         return all((self.workspace / path).exists() for path in required)
 
@@ -429,14 +513,19 @@ class DebugWindow(QtWidgets.QMainWindow):
     def launch_backend(self):
         try:
             task = backend_task(self.mode.currentData(), self.capabilities.currentData(),
-                                self.rviz.isChecked(), self.panel.isChecked(), self.device.text())
+                                self.rviz.isChecked(), self.panel.isChecked(), self.device.text(),
+                                self.navigation.isChecked(), self.navigation_device.text(),
+                                self.navigation_config.text())
         except ValueError as error:
             self.notice.setText(str(error))
             return
         self.request(task)
 
     def launch_panel(self):
-        self.request(Task('panel', '控制面板', ['ros2', 'run', 'terramind_panel', 'control_panel'], panel=True))
+        config = self.workspace / 'src/terramind_bringup/config/control.yaml'
+        self.request(Task('panel', '控制面板',
+                          ['ros2', 'run', 'terramind_panel', 'control_panel',
+                           '--ros-args', '--params-file', str(config)], panel=True))
 
     def build(self):
         self.request(Task('build', '编译工作区', BUILD, overlay=False))

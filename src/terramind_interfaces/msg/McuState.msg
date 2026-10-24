@@ -17,7 +17,7 @@ uint8 mode
 # bit0 命令超时；bit1 CAN 故障；bit2 接收缓冲区溢出；其余保留。
 uint16 faults
 # bit0 底盘；bit1/2 左/右播撒；bit3 刀盘；bit4 升降；bit5 喷洒。
-# 当前板卡 47，旧板卡 15，全功能模拟器可设 63。
+# 兼容 15/47/63；当前固件升降/喷洒初始化成功时分别上报 bit4/bit5。
 uint16 capabilities
 # 最近接纳指令年龄 ms；饱和值/尚未接纳时为 65535。
 uint16 command_age_ms
