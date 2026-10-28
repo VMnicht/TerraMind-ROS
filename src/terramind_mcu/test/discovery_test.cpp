@@ -18,6 +18,18 @@ namespace fs = std::filesystem;
 
 namespace
 {
+// 其他包可同时运行真实扫描测试；忙时只重试锁竞争，不重试识别失败。
+auto discover(const std::vector<std::string> & patterns, double seconds,
+  const std::function<bool()> & running)
+{
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+  while (true) {
+    auto result = mcu::discover_control_board(patterns, seconds, running);
+    if (result.errors != std::vector<std::string>{"serial discovery busy; retrying"} ||
+      std::chrono::steady_clock::now() >= deadline) {return result;}
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
 struct Directory
 {
   std::string path;
@@ -143,7 +155,7 @@ TEST(Discovery, SelectsUniqueBoardWithoutTransmittingToAnyCandidate)
   Peer corrupt(directory.path + "/bad-crc", Peer::BAD_CRC);
   Peer quiet(directory.path + "/silent", Peer::QUIET);
   Peer board(directory.path + "/control", Peer::BOARD);
-  auto found = mcu::discover_control_board({directory.path + "/*"}, .25, [] {return true;});
+  auto found = discover({directory.path + "/*"}, .25, [] {return true;});
   ASSERT_TRUE(found.port);
   ASSERT_EQ(found.matches.size(), 1u);
   EXPECT_EQ(found.device, directory.path + "/control");
@@ -162,7 +174,7 @@ TEST(Discovery, MultipleBoardsAreAmbiguousAndReceiveNoControl)
   Directory directory;
   Peer one(directory.path + "/one", Peer::BOARD);
   Peer two(directory.path + "/two", Peer::BOARD);
-  auto found = mcu::discover_control_board({directory.path + "/*"}, .25, [] {return true;});
+  auto found = discover({directory.path + "/*"}, .25, [] {return true;});
   EXPECT_FALSE(found.port);
   EXPECT_EQ(found.matches.size(), 2u);
   EXPECT_EQ(one.received, 0u);
@@ -173,7 +185,7 @@ TEST(Discovery, RepeatedFramesCannotKeepAnOldIdentificationAlive)
 {
   Directory directory;
   Peer duplicate(directory.path + "/duplicate", Peer::DUPLICATES);
-  auto found = mcu::discover_control_board({directory.path + "/*"}, .35, [] {return true;});
+  auto found = discover({directory.path + "/*"}, .35, [] {return true;});
   EXPECT_FALSE(found.port);
   EXPECT_TRUE(found.matches.empty());
   EXPECT_EQ(duplicate.received, 0u);
@@ -185,12 +197,12 @@ TEST(Discovery, SkipsLockedPortsAndCancelsPromptly)
   Peer board(directory.path + "/busy", Peer::BOARD);
   terramind::transport::SerialPort owner;
   owner.open(board.path);
-  auto found = mcu::discover_control_board({directory.path + "/*"}, .25, [] {return true;});
+  auto found = discover({directory.path + "/*"}, .25, [] {return true;});
   EXPECT_FALSE(found.port);
   EXPECT_EQ(found.errors.size(), 1u);
   EXPECT_EQ(board.received, 0u);
   const auto start = std::chrono::steady_clock::now();
-  auto cancelled = mcu::discover_control_board({directory.path + "/*"}, 10, [] {return false;});
+  auto cancelled = discover({directory.path + "/*"}, 10, [] {return false;});
   EXPECT_FALSE(cancelled.port);
   EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(100));
 }

@@ -10,6 +10,9 @@ mcu_serial_node:
     # 所有候选共享的监听窗口（秒）；启动较慢时可适当增大。
     discovery_listen_s: 0.6
     baud: 115200
+    # 2026-10-27 实车验证：板端正角速度为顺时针；ROS 正值为逆时针。
+    # 仅串口收发边界换向，仿真及轮速原始符号保持不变。
+    angular_command_sign: -1
     # 发令周期允许 20～50 ms，默认 50 Hz；重连间隔单位秒。
     tx_period_ms: 20
     reconnect_interval_s: 1.0

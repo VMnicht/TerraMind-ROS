@@ -5,7 +5,8 @@
 #include "rclcpp/rclcpp.hpp"
 namespace terramind::mcu
 {
-// 原样映射板卡反馈；stamp 为 PC 收帧时间，不推断真实传感器采样时刻。
+// 字段映射；调用方先统一底盘角速度方向，轮速保留固件符号。
+// stamp 为 PC 收帧时间，不推断真实传感器采样时刻。
 inline terramind_interfaces::msg::McuState to_ros(
   const protocol::State & s, uint16_t seq,
   const Session & session, bool simulated,

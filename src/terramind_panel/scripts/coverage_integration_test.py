@@ -78,7 +78,8 @@ def main():
                  node.coverage.histories[args.pose_source][-1][0]-node.coverage.histories[args.pose_source][0][0] >= .45)
             page.capture.click()
             assert node.coverage.anchor is not None
-            target=page.canvas.point(.8,.4).toPoint()
+            target=page.canvas.point(.8+node.coverage.mower_forward_offset,
+                                     .4-min(.4,page.width.value())/2).toPoint()
             QtTest.QTest.mousePress(page.canvas,QtCore.Qt.LeftButton,pos=page.canvas.point(0,0).toPoint())
             app.sendEvent(page.canvas,QtGui.QMouseEvent(QtCore.QEvent.MouseMove,
                           QtCore.QPointF(target),QtCore.Qt.NoButton,QtCore.Qt.LeftButton,QtCore.Qt.NoModifier))
@@ -89,6 +90,9 @@ def main():
             window.checks['lift'].setChecked(True);window.editors['lift_mm'].setValue(5.)
             page.generate.click()
             assert node.coverage.plan is not None
+            first=node.coverage.plan.segments[0]
+            assert first.kind=='line' and first.mowing and first.start==node.coverage.anchor
+            assert abs(wrap(first.end.yaw-node.coverage.anchor.yaw))<1e-9
             window.grab().save('/tmp/terramind-coverage-plan.png')
             page.execute.click()
             wait(lambda:node.phase=='running')

@@ -3,40 +3,11 @@
 #include "terramind_protocol/frame_parser.hpp"
 #include <chrono>
 #include <cmath>
-#include <glob.h>
-#include <set>
 #include <stdexcept>
-#include <sys/stat.h>
 #include <thread>
 
 namespace terramind::mcu
 {
-std::vector<std::string> serial_candidates(const std::vector<std::string> & patterns)
-{
-  std::vector<std::string> paths;
-  std::set<dev_t> devices;
-  for (const auto & pattern : patterns) {
-    glob_t expanded{};
-    const int result = glob(pattern.c_str(), 0, nullptr, &expanded);
-    if (result != 0 && result != GLOB_NOMATCH) {
-      globfree(&expanded);
-      throw std::runtime_error("cannot enumerate serial pattern: " + pattern);
-    }
-    for (size_t i = 0; i < expanded.gl_pathc; ++i) {
-      struct stat info{};
-      const std::string path = expanded.gl_pathv[i];
-      // stat 跟随符号链接，使用字符设备号去重而不是比较路径字符串。
-      if (stat(path.c_str(), &info) == 0 && S_ISCHR(info.st_mode) &&
-        devices.insert(info.st_rdev).second)
-      {
-        paths.push_back(path);
-      }
-    }
-    globfree(&expanded);
-  }
-  return paths;
-}
-
 bool StatusProbe::observe(const protocol::Frame & frame)
 {
   if (frame.type != protocol::STATUS) {
@@ -75,6 +46,12 @@ DiscoveryResult discover_control_board(
     throw std::invalid_argument("discovery_listen_s must be in [0.15, 10]");
   }
   DiscoveryResult result;
+  if (!keep_running()) {return result;}
+  transport::DiscoveryLock scan_lock;
+  if (!scan_lock.acquired()) {
+    result.errors.push_back("serial discovery busy; retrying");
+    return result;
+  }
   struct Candidate
   {
     std::string path;

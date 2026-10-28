@@ -1,6 +1,6 @@
 #pragma once
 #include "terramind_protocol/protocol_types.hpp"
-#include "terramind_transport/serial_port.hpp"
+#include "terramind_transport/port_discovery.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -9,7 +9,7 @@
 namespace terramind::mcu
 {
 // 按 glob 配置顺序枚举，同一设备的 by-id 和 ttyUSB 等别名只保留一次。
-std::vector<std::string> serial_candidates(const std::vector<std::string> & patterns);
+using transport::serial_candidates;
 
 class StatusProbe
 {
@@ -25,15 +25,7 @@ private:
   uint32_t uptime_ = 0;
 };
 
-struct DiscoveryResult
-{
-  // 识别后转移已打开且加锁的句柄，握手前不再次按路径打开设备。
-  std::unique_ptr<transport::SerialPort> port;
-  std::string device;
-  std::vector<std::string> matches;
-  std::vector<std::string> errors;
-  size_t candidate_count = 0;
-};
+using transport::DiscoveryResult;
 
 // 被动识别：会打开并配置候选串口，但不向任何候选端口写入探测字节。
 // 零个或多个匹配均不选择，避免把控制指令发给导航板或另一块控制板。

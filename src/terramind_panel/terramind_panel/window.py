@@ -403,6 +403,8 @@ def main(args=None):
     app.setFont(QtGui.QFont('Noto Sans CJK SC', 10))
     node = PanelNode()
     window = PanelWindow(node)
+    if node.declare_parameter('initial_page', 'manual').value == 'coverage':
+        window.mode_tabs.setCurrentWidget(window.coverage_page)
     shutdown_requested = False
 
     def request_shutdown(*_):

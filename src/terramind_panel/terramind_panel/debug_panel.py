@@ -30,6 +30,7 @@ TESTS = [
     ('控制面板 · 旧板卡 / 不含喷洒', 'terramind_panel', ['panel_integration_test.py', '--mode', 'sim', '--capabilities', str(LEGACY_CAPABILITIES)]),
     ('调试总面板 · 启动与停止联调', 'terramind_panel', ['debug_launcher_integration_test.py']),
     ('导航板 · 私有串口与坐标测试', 'terramind_navigation_driver', ['navigation_integration_test.py']),
+    ('导航板 · 自动发现与双板并发测试', 'terramind_navigation_driver', ['navigation_discovery_integration_test.py']),
     ('区域作业 · 画区、覆盖与返航仿真', 'terramind_panel', ['coverage_integration_test.py']),
 ]
 STYLE = '''
@@ -75,8 +76,8 @@ def backend_task(mode, capabilities=CURRENT_CAPABILITIES, rviz=True, panel=True,
         arguments.append('device:=' + device)
         if navigation:
             navigation_device = navigation_device.strip()
-            if navigation_device and not navigation_device.startswith('/dev/'):
-                raise ValueError('导航串口请留空使用配置，或填写 /dev/ 下的设备路径')
+            if navigation_device and navigation_device != 'auto' and not navigation_device.startswith('/dev/'):
+                raise ValueError('导航串口请留空使用配置，或填写 auto / /dev/ 下的设备路径')
             config = Path(navigation_config).expanduser()
             if not config.is_file():
                 raise ValueError('导航配置文件不存在')
@@ -225,7 +226,7 @@ class DebugWindow(QtWidgets.QMainWindow):
         self.navigation = QtWidgets.QCheckBox('同时接入导航板')
         form.addRow(self.navigation)
         self.navigation_device = QtWidgets.QLineEdit()
-        self.navigation_device.setPlaceholderText('留空使用导航配置中的串口')
+        self.navigation_device.setPlaceholderText('留空使用配置；auto 自动识别；或 /dev/ 路径')
         form.addRow('导航端口', self.navigation_device)
         self.navigation_config = QtWidgets.QLineEdit(str(workspace / 'src/terramind_bringup/config/navigation.yaml'))
         self.navigation_config.setToolTip(self.navigation_config.text())

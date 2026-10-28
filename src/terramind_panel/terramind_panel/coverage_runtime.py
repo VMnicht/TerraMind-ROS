@@ -20,10 +20,29 @@ class CoverageRuntime:
         self.samples = {}
         self.pose_stamps = {}
         self.histories = {}
+        self.default_cutting_width = float(node.declare_parameter('coverage_cutting_width_m', .27).value)
+        self.mower_forward_offset = float(node.declare_parameter('coverage_mower_forward_offset_m', .20).value)
+        self.turn_style = node.declare_parameter('coverage_turn_style', 'arc').value
+        self.minimum_linear = float(node.declare_parameter('coverage_minimum_linear_mps', 0.).value)
+        self.minimum_angular = float(node.declare_parameter('coverage_minimum_angular_radps', 0.).value)
+        self.maximum_angular = float(node.declare_parameter('coverage_maximum_angular_radps', 1.2).value)
+        self.speed_limit = float(node.declare_parameter('coverage_speed_limit_mps', .35).value)
+        if not .02 <= self.speed_limit <= .35:
+            raise ValueError('区域作业速度上限超出范围')
+        if not (0 <= self.minimum_linear <= self.speed_limit and
+                0 <= self.minimum_angular <= self.maximum_angular <= 1.2 and self.maximum_angular > 0):
+            raise ValueError('区域作业死区或角速度限制超出范围')
+        if self.turn_style not in ('arc','pivot'):
+            raise ValueError('区域作业换行方式必须为 arc 或 pivot')
+        if not (.05 <= self.default_cutting_width <= 10. and 0 <= self.mower_forward_offset <= 2.):
+            raise ValueError('割幅或刀盘前向偏移超出范围')
         self.position_tolerance = float(node.declare_parameter('coverage_position_tolerance_m', .03).value)
         self.yaw_tolerance = float(node.declare_parameter('coverage_yaw_tolerance_rad', .035).value)
         if not (0 < self.position_tolerance <= .2 and 0 < self.yaw_tolerance <= .2):
             raise ValueError('覆盖任务到位容差超出范围')
+        self.set_start_tolerances(
+            float(node.declare_parameter('coverage_start_position_tolerance_m', .03).value),
+            float(node.declare_parameter('coverage_start_yaw_tolerance_rad', .035).value))
         self.anchor = self.identity = self.plan = self.tracker = None
         self.tools = Selection()
         self.message = '停稳后以当前位置建区'
@@ -110,7 +129,7 @@ class CoverageRuntime:
         self.require_stationary(pose)
         self.anchor, self.identity = pose, identity
         self.plan = self.tracker = None
-        self.message = '角点已锁定；拖动对角点，然后生成路线'
+        self.message = '首行起点已锁定；拖动区域远角或设置尺寸，然后生成路线'
 
     def require_stationary(self, pose):
         history = self.histories.get(self.source, ())
@@ -124,21 +143,35 @@ class CoverageRuntime:
             raise ValueError('运行中不能修改路线')
         if self.anchor is None:
             raise ValueError('请先以当前位置建区')
-        self.plan = plan_rectangle(self.anchor, x, y, width)
+        self.plan = plan_rectangle(self.anchor, x, y, width, self.mower_forward_offset, self.turn_style)
         self.message = f'{self.plan.rows} 行 · 行距 {self.plan.spacing:.2f} m · 全程 {self.plan.length:.1f} m'
 
+    def set_start_tolerances(self, position, yaw):
+        if self.node.phase != 'idle' or self.node.enable_future is not None:
+            raise ValueError('请停止作业后修改启动容差')
+        if not (0 < position <= .5 and 0 < yaw <= math.radians(30)):
+            raise ValueError('启动容差范围：位置 0～0.5 m，朝向 0～30°（不含零）')
+        self.start_position_tolerance = position
+        self.start_yaw_tolerance = yaw
+
     def start(self, tools, speed):
+        if not 0 < speed <= self.speed_limit:
+            raise ValueError(f'区域作业速度必须在 0～{self.speed_limit:.2f} m/s 内')
         if self.plan is None:
             raise ValueError('请先生成路线')
         pose, identity = self.pose()
         self.require_stationary(pose)
         if identity != self.identity:
             raise ValueError('定位原点或连接改变，请重新建区')
-        if pose.distance(self.anchor) > self.position_tolerance or abs(wrap(pose.yaw-self.anchor.yaw)) > self.yaw_tolerance:
-            raise ValueError('车辆已离开建区位姿，请重新建区')
+        distance = pose.distance(self.anchor)
+        yaw_error = abs(wrap(pose.yaw-self.anchor.yaw))
+        if distance > self.start_position_tolerance or yaw_error > self.start_yaw_tolerance:
+            raise ValueError(f'超出启动容差：位置偏差 {distance:.3f} m / 上限 {self.start_position_tolerance:.3f} m；'
+                             f'朝向偏差 {math.degrees(yaw_error):.2f}° / 上限 {math.degrees(self.start_yaw_tolerance):.2f}°。请调整容差或重新建区')
         if not self.node.board.capabilities & 1:
             raise ValueError('当前板卡不支持底盘')
-        tracker = CoverageTracker(self.plan, speed, self.position_tolerance, self.yaw_tolerance)
+        tracker = CoverageTracker(self.plan, speed, self.position_tolerance, self.yaw_tolerance,
+                                  min(speed,self.minimum_linear),self.minimum_angular,self.maximum_angular)
         # 仅保留本任务使用的刀盘和升降；升降在各路段保持，刀盘仅覆盖段开启。
         self.tools = Selection(mower_on=tools.mower_on, mower_percent=tools.mower_percent,
                                lift_on=tools.lift_on, lift_mm=tools.lift_mm).normalized()
@@ -174,5 +207,5 @@ class CoverageRuntime:
         else:
             self.node.active = replace(self.tools,linear_mps=output.linear,angular_radps=output.angular,
                                        mower_on=self.tools.mower_on and output.mowing).normalized()
-            names = {'entry':'进入首行','coverage':'覆盖作业','turn':'圆弧换行','return':'返回起点','align':'恢复朝向'}
+            names = {'entry':'进入首行','coverage':'覆盖作业','turn':'换行','return':'返回起点','align':'恢复朝向'}
             self.message = f'{names[self.tracker.phase]} · 路段 {self.tracker.index+1}/{len(self.plan.segments)}'

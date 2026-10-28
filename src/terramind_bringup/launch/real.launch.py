@@ -21,6 +21,7 @@ def generate_launch_description():
         DeclareLaunchArgument('device', default_value=default_device,
                               description='auto to discover the control board, or an explicit serial path'),
         DeclareLaunchArgument('panel', default_value='false'),
+        DeclareLaunchArgument('panel_page', default_value='manual', choices=['manual', 'coverage']),
         DeclareLaunchArgument('navigation', default_value='false'),
         DeclareLaunchArgument('navigation_device', default_value=''),
         DeclareLaunchArgument('navigation_config', default_value=str(share/'config/navigation.yaml')),
@@ -33,6 +34,7 @@ def generate_launch_description():
                                'device': LaunchConfiguration('navigation_device'),
                                'rviz': LaunchConfiguration('navigation_rviz')}.items(),
              condition=IfCondition(LaunchConfiguration('navigation'))),
-        Node(package='terramind_panel', executable='control_panel', parameters=[common],
+        Node(package='terramind_panel', executable='control_panel',
+             parameters=[common, {'initial_page': LaunchConfiguration('panel_page')}],
              condition=IfCondition(LaunchConfiguration('panel')), output='screen'),
     ])

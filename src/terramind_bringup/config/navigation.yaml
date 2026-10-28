@@ -1,7 +1,13 @@
 navigation_serial_node:
   ros__parameters:
-    # 建议使用 /dev/serial/by-id/... 或稳定 udev 别名；导航首版不自动扫描。
-    device: /dev/terramind-navigation
+    # auto 被动识别唯一导航板；也可填写 /dev/serial/by-id/... 或稳定 udev 别名。
+    device: auto
+    discovery_patterns:
+      - /dev/serial/by-id/*
+      - /dev/ttyUSB*
+      - /dev/ttyACM*
+    # 无定位时板卡只发约 1 Hz 心跳，需覆盖至少三个推进帧。
+    discovery_listen_s: 3.5
     baud: 460800
     reconnect_interval_s: 1.0
     assembly_timeout_s: 0.1
@@ -22,11 +28,13 @@ navigation_serial_node:
     origin_height_m: 0.0
     # 未标定时 pose 输出 IMU 中心/FLU，不能当作车辆控制点位姿。
     # 未测量时保持 false；确认下面的平移、安装姿态后才改为 true。
-    extrinsics_calibrated: false
+    extrinsics_calibrated: true
     # 后轴中心 -> 导航板输出的定位参考点，表达于车体 FLU，单位 m。
     # 前方为正 x；正反自转辨识只估计 x/y，z 需测量填写。
-    imu_translation_in_base_m: [0.0, 0.0, 0.0]
+    # 2026-10-27 正反自转 + 独立整圈验证：水平中心 RMS 0.02049 m。
+    # X/Y 已验证；Z=0.10 m 由用户确认（定位参考点比后轴中心高 10 cm）。
+    imu_translation_in_base_m: [0.37256543143110654, -0.003113059886865596, 0.1]
     # 导航 IMU 的 FLU 坐标系到车体 FLU 的安装旋转，顺序 w,x,y,z。
-    # 单位四元数只是占位；自转辨识不能同时求出安装角与车体杆臂。
+    # 用户确认前向朝车头、水平安装；自转辨识本身不估计安装角。
     # 将“导航机体系经 FRD->FLU 后”的向量旋转到 base_link；不是原始传感器轴。
     imu_rotation_in_base_wxyz: [1.0, 0.0, 0.0, 0.0]

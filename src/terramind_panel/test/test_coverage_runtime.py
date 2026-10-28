@@ -95,6 +95,36 @@ def test_real_board_rejects_simulation_source(node):
     with pytest.raises(ValueError,match='真实控制板'):node.coverage.pose()
 
 
+def test_adjustable_start_tolerance_does_not_change_tracking(node):
+    from terramind_panel.coverage import Pose2
+    r=node.coverage;r.capture();r.generate(2.,1.,.4)
+    shifted=Pose2(.08,0.,.08)
+    r.samples['navigation']=(shifted,100.,r.nav_identity())
+    r.histories['navigation'].clear()
+    for t in (99.5,99.7,100.):r.histories['navigation'].append((t,shifted))
+    with pytest.raises(ValueError,match='位置偏差 0.080'):r.start(Selection(),.15)
+    r.set_start_tolerances(.1,.035)
+    with pytest.raises(ValueError,match='朝向偏差'):r.start(Selection(),.15)
+    r.set_start_tolerances(.1,.1)
+    r.start(Selection(),.15)
+    assert r.tracker.position_tolerance == .03
+    assert r.tracker.yaw_tolerance == .035
+    with pytest.raises(ValueError,match='停止'):r.set_start_tolerances(.2,.1)
+
+
+@pytest.mark.parametrize('position,yaw', [(0,.1),(.6,.1),(.1,0),(.1,.6),(float('nan'),.1),(.1,float('inf'))])
+def test_invalid_start_tolerance_rejected(node,position,yaw):
+    with pytest.raises(ValueError):node.coverage.set_start_tolerances(position,yaw)
+
+
+def test_speed_limit_blocks_enable(node):
+    r=node.coverage;r.capture();r.generate(2.,2.,.27)
+    r.speed_limit=.1
+    for speed in (.2,-.1,float('nan')):
+        with pytest.raises(ValueError,match='速度'):r.start(Selection(),speed)
+        assert node.phase=='idle' and not node.control.enabled
+
+
 def test_manual_commands_cannot_override_coverage(node):
     start(node)
     with pytest.raises(ValueError,match='手动'):PanelNode.start(node,Selection())

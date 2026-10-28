@@ -16,6 +16,12 @@ public:
   }
   SerialPort(const SerialPort &) = delete;
   SerialPort & operator=(const SerialPort &) = delete;
+  SerialPort(SerialPort && other) noexcept : fd_(other.fd_) {other.fd_ = -1;}
+  SerialPort & operator=(SerialPort && other) noexcept
+  {
+    if (this != &other) {close(); fd_ = other.fd_; other.fd_ = -1;}
+    return *this;
+  }
   void open(const std::string & path, int baud = 115200);
   void close();
   void discard_input();

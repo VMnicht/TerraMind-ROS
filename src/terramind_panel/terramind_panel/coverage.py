@@ -1,6 +1,6 @@
 """矩形覆盖几何核心；坐标单位米、角度弧度，不依赖 ROS 或 Qt。
 
-矩形是覆盖范围，允许掉头越界。起点是车辆参考点，不是车辆包络角点。
+矩形是覆盖范围，允许掉头越界。起点是首行后轴中心，区域按刀盘位置及割幅偏移。
 转向段显式保留，不能用一串位置点丢掉初末朝向要求。
 """
 from dataclasses import dataclass
@@ -69,6 +69,12 @@ class CoveragePlan:
     rows: int
     spacing: float
     segments: tuple
+    mower_forward_offset: float = 0.
+
+    @property
+    def bounds(self):
+        """覆盖矩形在建区车体坐标系下的 xmin, ymin, xmax, ymax。"""
+        return rectangle_bounds(self.corner_x,self.corner_y,self.width,self.mower_forward_offset)
 
     @property
     def length(self):
@@ -93,12 +99,23 @@ class CoveragePlan:
                      for n in [max(1, math.ceil(segment.length/step))])
 
 
-def plan_rectangle(origin, corner_x, corner_y, width):
+def rectangle_bounds(corner_x, corner_y, width, mower_forward_offset=0.):
+    sx,sy=math.copysign(1.,corner_x),math.copysign(1.,corner_y)
+    x=sx*mower_forward_offset
+    y=-sy*min(width,abs(corner_y))/2
+    return min(x,x+corner_x),min(y,y+corner_y),max(x,x+corner_x),max(y,y+corner_y)
+
+
+def plan_rectangle(origin, corner_x, corner_y, width, mower_forward_offset=0., turn_style='arc'):
     """四个拖拽象限均支持；最后一个位姿精确等于输入初始位姿。"""
-    if not all(math.isfinite(v) for v in (origin.x, origin.y, origin.yaw, corner_x, corner_y, width)):
+    if not all(math.isfinite(v) for v in (origin.x, origin.y, origin.yaw, corner_x, corner_y, width, mower_forward_offset)):
         raise ValueError('位姿、矩形尺寸和覆盖宽度必须为有限数')
     if width <= 0 or abs(corner_x) < .001 or abs(corner_y) < .001:
         raise ValueError('覆盖宽度必须大于零，矩形两边至少为 1 mm')
+    if not 0 <= mower_forward_offset <= 2.:
+        raise ValueError('刀盘中心前向偏移必须在 0～2 m 内')
+    if turn_style not in ('arc', 'pivot'):
+        raise ValueError('未知的换行方式')
     rows = math.ceil(abs(corner_y)/width)
     if rows > 2000:
         raise ValueError('覆盖行数超过 2000，请检查尺寸与覆盖宽度')
@@ -116,7 +133,7 @@ def plan_rectangle(origin, corner_x, corner_y, width):
         target = Pose2(current.x, current.y, yaw)
         if abs(wrap(yaw-current.yaw)) > 1e-10 or phase == 'align':
             result.append(Segment('rotate', phase, current, target))
-        current = target
+            current = target
 
     def line(x, y, phase, mowing=False):
         nonlocal current
@@ -127,17 +144,25 @@ def plan_rectangle(origin, corner_x, corner_y, width):
         result.append(Segment('line', phase, current, target, mowing))
         current = target
 
-    line(*world(0., sy*spacing/2), 'entry')
+    # 首行从当前后轴中心出发；区域前缘放在刀盘中心，侧缘外移半割幅。
+    # 正 X 区域直接沿当前车头行驶；负 X 区域仍需先转向车后。
     for i in range(rows):
-        y = sy*(i+.5)*spacing
-        end_x = corner_x if i % 2 == 0 else 0.
-        line(*world(end_x, y), 'coverage', True)
+        y = sy*i*spacing
+        end_x = sx*mower_forward_offset+(corner_x if i % 2 == 0 else 0.)
+        direction = sx*(1 if i % 2 == 0 else -1)
+        line(*world(end_x-direction*mower_forward_offset, y), 'coverage', True)
         if i + 1 < rows:
-            center = world(end_x, y+sy*spacing/2)
+            # 下一行车头反向，后轴起点在边界另一侧；关闭刀盘向前延伸后再半圆掉头。
+            turn_x = end_x+direction*mower_forward_offset
+            line(*world(turn_x, y), 'turn')
+            if turn_style == 'pivot':
+                line(*world(turn_x, y+sy*spacing), 'turn')
+                continue
+            center = world(turn_x, y+sy*spacing/2)
             sweep = math.pi*sx*sy*(1 if i % 2 == 0 else -1)
-            target = Pose2(*world(end_x, y+sy*spacing), wrap(current.yaw+sweep))
+            target = Pose2(*world(turn_x, y+sy*spacing), wrap(current.yaw+sweep))
             result.append(Segment('arc', 'turn', current, target, False, center, sweep))
             current = target
     line(origin.x, origin.y, 'return')
     rotate(origin.yaw, 'align')
-    return CoveragePlan(origin, corner_x, corner_y, width, rows, spacing, tuple(result))
+    return CoveragePlan(origin, corner_x, corner_y, width, rows, spacing, tuple(result), mower_forward_offset)

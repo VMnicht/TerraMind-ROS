@@ -10,5 +10,16 @@ terramind_panel:
     # 当前升降机构缩短量上限，向下取整至 0.01 mm；关闭/停止后回零。
     lift_max_mm: 38.56
     # 自动区域作业：最终位置/朝向需连续 0.8 秒同时达标。
-    coverage_position_tolerance_m: 0.03
-    coverage_yaw_tolerance_rad: 0.035
+    coverage_position_tolerance_m: 0.06
+    coverage_yaw_tolerance_rad: 0.07
+    coverage_start_position_tolerance_m: 0.10
+    coverage_start_yaw_tolerance_rad: 0.10
+    coverage_turn_style: pivot
+    coverage_minimum_linear_mps: 0.10
+    coverage_minimum_angular_radps: 0.60
+    coverage_maximum_angular_radps: 0.60
+    # 实测导航位移速度高于固件标称值；轮径/传动比修正前保守限制指令速度。
+    coverage_speed_limit_mps: 0.10
+    # 用户实测：有效割幅 27 cm，刀盘中心在后轴中心前方 20 cm。
+    coverage_cutting_width_m: 0.27
+    coverage_mower_forward_offset_m: 0.20

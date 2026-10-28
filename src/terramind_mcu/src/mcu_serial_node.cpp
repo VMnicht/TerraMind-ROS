@@ -1,4 +1,5 @@
 #include "terramind_mcu/ros_conversions.hpp"
+#include "terramind_mcu/angular_mapping.hpp"
 #include "terramind_mcu/port_discovery.hpp"
 #include "terramind_control/ros_helpers.hpp"
 #include "terramind_protocol/frame_parser.hpp"
@@ -52,6 +53,7 @@ public:
       throw std::invalid_argument("invalid reconnect interval");
     }
     simulated_ = declare_parameter("simulated", false);
+    angular_mapping_ = mcu::AngularMapping(declare_parameter("angular_command_sign", 1));
     if (get_parameter("use_sim_time").as_bool()) {
       throw std::invalid_argument("serial watchdog requires wall time");
     }
@@ -182,6 +184,7 @@ private:
             // 识别出控制板仍不等于允许运动，先发送全零未使能快照完成握手。
             c = {};
           }
+          c = angular_mapping_.to_board(c);
           port->write_all(tp::encode_control(c, seq));
           session_.sent(seq++, c, t);
           next_tx = t + period_ * 0.001;
@@ -211,7 +214,8 @@ private:
               guard_.trip(session_.reason);
             }
           }
-          states_->publish(mcu::to_ros(s, f.seq, session_, simulated_, now()));
+          states_->publish(mcu::to_ros(
+              angular_mapping_.to_ros(s), f.seq, session_, simulated_, now()));
         }
         if (t >= next_report) {
           report(session_.ready ? 0 : 1, session_.reason);
@@ -251,6 +255,7 @@ private:
   double timeout_ = 0.15, state_timeout_ = 0.15, retry_ = 1;
   int period_ = 20;
   bool simulated_ = false;
+  mcu::AngularMapping angular_mapping_;
   uint64_t connection_ = 0;
   uint16_t capabilities_ = tp::CURRENT_CAPABILITIES;
   double last_stamp_ = 0;

@@ -1,6 +1,7 @@
 """米制画区画布与区域作业页面；鼠标只编辑几何，不直接发送运动命令。"""
 import math
 from PyQt5 import QtCore, QtGui, QtWidgets
+from .coverage import rectangle_bounds
 
 
 class CoverageCanvas(QtWidgets.QWidget):
@@ -9,7 +10,8 @@ class CoverageCanvas(QtWidgets.QWidget):
     def __init__(self, runtime):
         super().__init__()
         self.runtime = runtime
-        self.corner = (3.,2.)
+        self.corner = (2.,2.)
+        self.cutting_width = runtime.default_cutting_width
         self.span = 10.
         self.dragging = False
         self.setMinimumSize(500,350)
@@ -29,7 +31,12 @@ class CoverageCanvas(QtWidgets.QWidget):
 
     def mouseMoveEvent(self,event):
         if self.dragging:
-            self.corner = ((event.x()-self.width()/2)/self.scale, (self.height()/2-event.y())/self.scale)
+            x=(event.x()-self.width()/2)/self.scale
+            y=(self.height()/2-event.y())/self.scale
+            # 拖动实际区域的远角，将刀盘前置距离及侧缘半割幅还原成区域尺寸。
+            length=max(.001,abs(x)-self.runtime.mower_forward_offset)
+            breadth=2*abs(y) if abs(y)<=self.cutting_width/2 else abs(y)+self.cutting_width/2
+            self.corner = (math.copysign(length,x),math.copysign(max(.001,breadth),y))
             self.cornerChanged.emit(*self.corner)
             self.update()
 
@@ -55,7 +62,9 @@ class CoverageCanvas(QtWidgets.QWidget):
         if runtime.anchor is None:
             p.drawText(self.rect(),QtCore.Qt.AlignCenter,'等待有效定位，点击“以当前位置建区”')
             return
-        rect=QtCore.QRectF(self.point(0,0),self.point(*self.corner)).normalized()
+        bounds=runtime.plan.bounds if runtime.plan else rectangle_bounds(
+            *self.corner,self.cutting_width,runtime.mower_forward_offset)
+        rect=QtCore.QRectF(self.point(*bounds[:2]),self.point(*bounds[2:])).normalized()
         p.setPen(QtGui.QPen(QtGui.QColor('#147f8a'),2))
         p.setBrush(QtGui.QColor(25,160,160,25));p.drawRect(rect)
         if runtime.plan:
@@ -70,7 +79,7 @@ class CoverageCanvas(QtWidgets.QWidget):
                 p.drawPath(path)
         p.setPen(QtGui.QPen(QtGui.QColor('#334654'),2));p.setBrush(QtGui.QColor('#ffffff'))
         p.drawEllipse(self.point(0,0),5,5)
-        p.drawText(self.point(0,0)+QtCore.QPointF(8,-8),'初始位姿 →')
+        p.drawText(self.point(0,0)+QtCore.QPointF(8,-8),'首行起点 / 返航点 →')
         try:
             pose,_=runtime.pose()
             a=runtime.anchor;c,s=math.cos(a.yaw),math.sin(a.yaw)
@@ -106,12 +115,24 @@ class CoverageWidget(QtWidgets.QWidget):
             field.setValue(value);field.setSuffix(unit);field.setSingleStep(.05)
             field.setKeyboardTracking(False);inputs.addWidget(field)
             return field
-        self.x=number('对角 X',-500,500,3.,' m')
-        self.y=number('对角 Y',-500,500,2.,' m')
-        self.width=number('车宽 / 有效割幅',.05,10.,.4,' m')
-        self.speed=number('速度',.02,.35,.15,' m/s')
+        self.x=number('区域长度 X',-500,500,2.,' m')
+        self.y=number('区域宽度 Y',-500,500,2.,' m')
+        self.width=number('有效割幅',.05,10.,self.runtime.default_cutting_width,' m')
+        self.speed=number('速度指令',max(.02,self.runtime.minimum_linear),self.runtime.speed_limit,
+                          min(.15,self.runtime.speed_limit),' m/s')
         layout.addLayout(inputs)
+        inputs=QtWidgets.QHBoxLayout()
+        self.start_position=number('启动位置容差',.001,.5,self.runtime.start_position_tolerance,' m')
+        self.start_yaw=number('启动朝向容差',.01,30.,math.degrees(self.runtime.start_yaw_tolerance),' °')
+        self.start_position.setSingleStep(.01)
+        self.start_yaw.setSingleStep(.5)
+        layout.addLayout(inputs)
+        tolerance_hint=QtWidgets.QLabel('启动容差仅用于与建区位姿比较，修改立即生效；不改变行驶到位精度。重开面板恢复默认值。')
+        tolerance_hint.setWordWrap(True);layout.addWidget(tolerance_hint)
         hint=QtWidgets.QLabel('绿色：覆盖 · 蓝色：进入/掉头 · 橙色：返航 · 红色：当前位姿\n'
+                             '正 X：首行沿车头直走；负 X：先转向车后。Y 正为左侧、负为右侧。区域按刀盘位置和半割幅偏移，尺寸不变。\n'
+                             f'路线为后轴中心轨迹；刀盘中心在后轴前方 {self.runtime.mower_forward_offset:.2f} m，已补偿作业行端点。\n'
+                             f'换行方式：{"停转移位" if self.runtime.turn_style == "pivot" else "半圆弧"}。\n'
                              '允许掉头越出覆盖区。刀盘和升降使用手动页的勾选/设定；换行与返航关闭刀盘，升降保持。')
         hint.setWordWrap(True);layout.addWidget(hint)
         self.tool_summary=QtWidgets.QLabel();layout.addWidget(self.tool_summary)
@@ -127,10 +148,15 @@ class CoverageWidget(QtWidgets.QWidget):
         self.source.currentIndexChanged.connect(self.change_source)
         self.canvas.cornerChanged.connect(self.drag)
         for field in (self.x,self.y,self.width):field.valueChanged.connect(self.edited)
+        for field in (self.start_position,self.start_yaw):
+            field.valueChanged.connect(lambda:self.call(lambda:self.runtime.set_start_tolerances(
+                self.start_position.value(),math.radians(self.start_yaw.value()))))
 
     def call(self,operation):
         try:operation()
-        except (ValueError,RuntimeError) as error:self.runtime.message=str(error)
+        except (ValueError,RuntimeError) as error:
+            self.runtime.message=str(error)
+            self.runtime.node.note('区域作业：'+str(error))
         self.refresh()
 
     def generate_plan(self):
@@ -150,11 +176,12 @@ class CoverageWidget(QtWidgets.QWidget):
         self.runtime.plan=None
         self.runtime.message='矩形或宽度已修改，请生成路线'
         self.canvas.corner=(self.x.value(),self.y.value())
+        self.canvas.cutting_width=self.width.value()
         self.canvas.update()
 
     def refresh(self):
         r=self.runtime;idle=r.node.phase=='idle' and r.node.enable_future is None
-        for widget in (self.source,self.capture,self.x,self.y,self.width,self.speed):widget.setEnabled(idle)
+        for widget in (self.source,self.capture,self.x,self.y,self.width,self.speed,self.start_position,self.start_yaw):widget.setEnabled(idle)
         self.generate.setEnabled(idle and r.anchor is not None)
         self.execute.setEnabled(idle and r.plan is not None)
         try:r.pose();error=''

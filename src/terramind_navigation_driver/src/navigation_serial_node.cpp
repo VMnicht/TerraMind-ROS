@@ -1,5 +1,6 @@
 #include "terramind_navigation_driver/coordinates.hpp"
 #include "terramind_navigation_driver/session.hpp"
+#include "terramind_navigation_driver/port_discovery.hpp"
 #include "terramind_transport/serial_port.hpp"
 #include "terramind_interfaces/msg/navigation_frame.hpp"
 #include "terramind_interfaces/msg/navigation_status.hpp"
@@ -28,9 +29,19 @@ class NavigationSerialNode : public rclcpp::Node
 public:
   NavigationSerialNode() : Node("navigation_serial_node")
   {
-    device_ = declare_parameter("device", std::string("/dev/terramind-navigation"));
-    if (device_.empty() || device_ == "auto") {
-      throw std::invalid_argument("navigation device requires an explicit serial path");
+    configured_device_ = declare_parameter("device", std::string("auto"));
+    if (configured_device_.empty()) {
+      throw std::invalid_argument("navigation device must be auto or an explicit serial path");
+    }
+    automatic_ = configured_device_ == "auto";
+    device_ = configured_device_;
+    discovery_patterns_ = declare_parameter("discovery_patterns", std::vector<std::string>{
+      "/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*"});
+    listen_seconds_ = declare_parameter("discovery_listen_s", 3.5);
+    if (!std::isfinite(listen_seconds_) || listen_seconds_ < .15 || listen_seconds_ > 10 ||
+      (automatic_ && discovery_patterns_.empty()))
+    {
+      throw std::invalid_argument("discovery requires nonempty patterns and listen_s in [0.15, 10]");
     }
     baud_ = declare_parameter("baud", 460800);
     if (baud_ != 460800) {throw std::invalid_argument("navigation v1 requires 460800 baud");}
@@ -190,6 +201,7 @@ private:
     d.name = "navigation_serial"; d.hardware_id = device_; d.message = s.reason;
     d.level = !s.online || s.nav_fault ? 2 : (!s.usable || !s.origin_ready ? 1 : 0);
     for (const auto & pair : std::vector<std::pair<std::string, std::string>>{
+        {"configured_device", configured_device_}, {"connected_device", port_.is_open() ? device_ : ""},
         {"frames", std::to_string(p.frames)}, {"crc_errors", std::to_string(p.crc_errors)},
         {"assembly_timeouts", std::to_string(p.timeouts)}, {"missing_packets", std::to_string(s.missing_packets)},
         {"stamp_reference", s.stamp_reference}, {"pose_child_frame", s.pose_child_frame},
@@ -206,10 +218,44 @@ private:
       try {
         double t = steady_seconds();
         if (!port_.is_open() && t >= next_open) {
-          port_.open(device_, baud_); parser_.reset(); session_.connect(t);
+          if (automatic_) {
+            device_ = "auto";
+            port_error_ = "正在扫描串口，监听导航板协议帧";
+            auto discovered = nav::discover_navigation_board(
+              discovery_patterns_, listen_seconds_, [this, &next_report] {
+                if (!running_ || !rclcpp::ok()) {return false;}
+                const double now = steady_seconds();
+                if (now >= next_report) {report(now); next_report = now + .05;}
+                return true;
+              });
+            if (!running_ || !rclcpp::ok()) {break;}
+            if (!discovered.port) {
+              std::string reason;
+              if (discovered.matches.size() > 1) {
+                reason = "发现多个导航板，请指定 device：";
+                for (const auto & match : discovered.matches) {reason += " " + match;}
+              } else if (discovered.candidate_count == 0) {
+                reason = "未发现候选串口，等待导航板接入";
+              } else {
+                reason = "已扫描 " + std::to_string(discovered.candidate_count) +
+                  " 个端口，未识别到持续上报的导航板";
+              }
+              for (size_t i = 0; i < std::min<size_t>(3, discovered.errors.size()); ++i) {
+                reason += "; " + discovered.errors[i];
+              }
+              throw std::runtime_error(reason);
+            }
+            device_ = discovered.device;
+            port_ = std::move(*discovered.port);
+          } else {
+            port_.open(configured_device_, baud_);
+          }
+          // 扫描耗时不计入新连接的报文超时窗口。
+          t = steady_seconds();
+          parser_.reset(); session_.connect(t);
           clear_path();
           if (opened_once) {++reconnects_;}
-          opened_once = true; latest_.reset(); last_orientation_.reset(); port_error_.clear();
+          opened_once = true; latest_.reset(); last_orientation_.reset(); port_error_.clear(); last_error_.clear();
           RCLCPP_INFO(get_logger(), "Receiving navigation on %s at %d baud", device_.c_str(), baud_);
         }
         if (port_.is_open()) {
@@ -224,8 +270,8 @@ private:
       } catch (const std::exception & e) {
         port_.close(); parser_.reset(); session_.disconnect(); latest_.reset(); last_orientation_.reset();
         clear_path();
-        if (port_error_ != e.what()) {RCLCPP_WARN(get_logger(), "%s", e.what());}
-        port_error_ = e.what(); next_open = steady_seconds() + retry_;
+        if (last_error_ != e.what()) {RCLCPP_WARN(get_logger(), "%s", e.what());}
+        last_error_ = port_error_ = e.what(); next_open = steady_seconds() + retry_;
       }
       const double t = steady_seconds();
       if (t >= next_report && rclcpp::ok()) {
@@ -235,6 +281,10 @@ private:
     }
     port_.close();
   }
+  std::string configured_device_, last_error_;
+  std::vector<std::string> discovery_patterns_;
+  bool automatic_ = true;
+  double listen_seconds_ = 3.5;
   std::string device_, frame_, imu_frame_, base_frame_, origin_mode_, port_error_;
   int baud_ = 460800;
   double retry_ = 1;

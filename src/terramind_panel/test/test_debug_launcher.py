@@ -186,7 +186,14 @@ def test_navigation_launch_options(app, tmp_path, monkeypatch):
     assert 'navigation_rviz:=true' in command
     window.navigation_device.setText('auto')
     window.launch_backend()
-    assert len(launched) == 1
+    assert len(launched) == 2
+    assert 'navigation_device:=auto' in launched[-1].command
+    window.navigation_device.setText('')
+    window.launch_backend()
+    assert 'navigation_device:=' in launched[-1].command
+    window.navigation_device.setText('not-a-device')
+    window.launch_backend()
+    assert len(launched) == 3
     window.close()
 
 

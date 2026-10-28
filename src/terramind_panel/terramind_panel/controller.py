@@ -61,6 +61,7 @@ class PanelNode(Node):
     def note(self, text):
         self.reason = text
         self.events.append(f'{datetime.now():%H:%M:%S}  {text}')
+        self.get_logger().info(text)
 
     def _source_time(self, header):
         # 扣除 ROS 传输延迟，再用单调时钟检查年龄，避免接收时给旧状态续期。
